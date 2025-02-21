@@ -1,4 +1,5 @@
 import axios from 'axios';
+import type { DatastoreResponse } from '@/types/api';
 
 export async function getDatastores(universeId: string, apiToken: string) {
   const apiUrl = `https://apis.roblox.com/datastores/v1/universes/${universeId}/standard-datastores`;
@@ -53,7 +54,7 @@ export async function setDataStoreEntry(
   apiToken: string,
   datastoreName: string,
   entryKey: string,
-  value: any,
+  value: unknown,
   matchVersion?: string,
   exclusiveCreate?: boolean,
   scope = ''

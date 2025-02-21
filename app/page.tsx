@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import dynamic from "next/dynamic";
 import EntryList from "@/components/EntryList";
 import EntryDetailEditor from "@/components/EntryDetailEditor";
+import type { DatastoreResponse, DatastoreEntry } from '@/types/api';
 
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), { ssr: false });
 
@@ -66,9 +67,9 @@ const Toast: React.FC<{
 export default function HomePage() {
   const [universeId, setUniverseId] = useState("");
   const [apiToken, setApiToken] = useState("");
-  const [datastores, setDatastores] = useState<any[]>([]);
+  const [datastores, setDatastores] = useState<string[]>([]);
   const [selectedDatastore, setSelectedDatastore] = useState("");
-  const [entries, setEntries] = useState<any[]>([]);
+  const [entries, setEntries] = useState<DatastoreEntry[]>([]);
   const [selectedEntryKey, setSelectedEntryKey] = useState<string>("");
   const [entryData, setEntryData] = useState<string>("");
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -220,12 +221,12 @@ export default function HomePage() {
                   <div className="space-y-2">
                     {datastores.map((ds) => (
                       <Button
-                        key={ds.name}
-                        onClick={() => handleSelectDatastore(ds.name)}
-                        variant={selectedDatastore === ds.name ? "secondary" : "outline"}
+                        key={ds}
+                        onClick={() => handleSelectDatastore(ds)}
+                        variant={selectedDatastore === ds ? "secondary" : "outline"}
                         className="w-full justify-start text-left"
                       >
-                        {ds.name}
+                        {ds}
                       </Button>
                     ))}
                   </div>

@@ -5,13 +5,14 @@ import { Input } from "@/components/ui/input"
 import { useState, useEffect, useCallback } from "react"
 import { useToast } from "@/components/ui/use-toast"
 import { Loader2 } from "lucide-react"
+import type { EntryListProps, DatastoreEntry } from '@/types/api'
 
-interface EntryListProps {
-  universeId: string
-  apiToken: string
-  datastoreName: string
-  selectedEntryKey: string
-  onSelectEntry: (key: string) => void
+interface ExtendedEntryListProps {
+  universeId: string;
+  apiToken: string;
+  datastoreName: string;
+  selectedEntryKey: string;
+  onSelectEntry: (key: string) => void;
 }
 
 export default function EntryList({ 
@@ -20,9 +21,9 @@ export default function EntryList({
   datastoreName, 
   selectedEntryKey, 
   onSelectEntry 
-}: EntryListProps) {
+}: ExtendedEntryListProps) {
+  const [entries, setEntries] = useState<DatastoreEntry[]>([])
   const [searchQuery, setSearchQuery] = useState("")
-  const [entries, setEntries] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [cursor, setCursor] = useState<string>("")
   const [hasMore, setHasMore] = useState(true)
@@ -34,8 +35,8 @@ export default function EntryList({
       const currentCursor = newSearch ? "" : cursor
       
       const params = new URLSearchParams({
-        universeId,
-        apiToken,
+        universeId: universeId,
+        apiToken: apiToken,
         prefix: searchValue,
         ...(currentCursor && { cursor: currentCursor })
       })
@@ -47,7 +48,7 @@ export default function EntryList({
         throw new Error(data.error)
       }
 
-      setEntries(prev => newSearch ? (data.entries || []) : [...prev, ...(data.entries || [])])
+      setEntries((prev: any) => newSearch ? (data.entries || []) : [...prev, ...(data.entries || [])])
       setCursor(data.nextPageCursor || "")
       setHasMore(!!data.nextPageCursor)
     } catch (error: any) {
@@ -59,14 +60,14 @@ export default function EntryList({
     } finally {
       setIsLoading(false)
     }
-  }, [universeId, apiToken, datastoreName, cursor, toast])
+  }, [entries, cursor, toast, datastoreName, universeId, apiToken])
 
   // Initial load effect
   useEffect(() => {
     if (datastoreName) {
       fetchEntries("", true)
     }
-  }, [datastoreName, fetchEntries])
+  }, [datastoreName]);
 
   // Search effect with debounce
   useEffect(() => {

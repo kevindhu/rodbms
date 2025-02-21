@@ -5,6 +5,7 @@ import {
   setDataStoreEntry,
   deleteDataStoreEntry,
 } from '@/lib/robloxApi';
+import type { DatastoreResponse, ErrorResponse } from '@/types/api';
 
 /**
  * GET => Fetch a single entry's data
@@ -14,22 +15,21 @@ import {
 
 // Example fix for GET:
 export async function GET(req: NextRequest, context: { params: { name: string } }) {
-  // Await the params object
-  const { name: datastoreName } = await context.params;
-  const { searchParams } = new URL(req.url);
-  const universeId = searchParams.get('universeId');
-  const apiToken = searchParams.get('apiToken');
-  const entryKey = searchParams.get('entryKey') || '';
-  const scope = searchParams.get('scope') || '';
-
-  if (!universeId || !apiToken || !entryKey) {
-    return NextResponse.json(
-      { error: 'Missing universeId, apiToken, or entryKey' },
-      { status: 400 }
-    );
-  }
-
   try {
+    const { name: datastoreName } = context.params;
+    const { searchParams } = new URL(req.url);
+    const universeId = searchParams.get('universeId');
+    const apiToken = searchParams.get('apiToken');
+    const entryKey = searchParams.get('entryKey') || '';
+    const scope = searchParams.get('scope') || '';
+
+    if (!universeId || !apiToken || !entryKey) {
+      return NextResponse.json<ErrorResponse>(
+        { error: 'Missing universeId, apiToken, or entryKey' },
+        { status: 400 }
+      );
+    }
+
     const data = await getDataStoreEntry(
       universeId,
       apiToken,
@@ -37,9 +37,10 @@ export async function GET(req: NextRequest, context: { params: { name: string } 
       entryKey,
       scope
     );
-    return NextResponse.json(data);
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return NextResponse.json<DatastoreResponse>(data);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return NextResponse.json<ErrorResponse>({ error: message }, { status: 500 });
   }
 }
 
