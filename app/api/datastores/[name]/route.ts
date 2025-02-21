@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDataStoreEntries } from '@/lib/robloxApi';
 import { rateLimit } from '@/lib/rateLimit';
+import type { DatastoreResponse } from '@/types/api';
 
 export const runtime = 'edge'; // Use edge runtime for better performance
 
@@ -42,7 +43,7 @@ export async function GET(
     const limit = 100;
 
     if (!universeId || !apiToken) {
-      return NextResponse.json(
+      return NextResponse.json<DatastoreResponse>(
         { error: 'Missing universeId or apiToken' },
         { status: 400 }
       );
@@ -56,9 +57,8 @@ export async function GET(
         key.toLowerCase().includes(prefix)
       );
     }
-
-    return NextResponse.json({
-      entries: filteredEntries,
+    return NextResponse.json<DatastoreResponse>({
+      keys: filteredEntries,
       nextPageCursor: data.nextPageCursor || ''
     }, {
       headers: {
@@ -67,7 +67,8 @@ export async function GET(
         'X-RateLimit-Reset': rateLimitResult.reset.getTime().toString()
       }
     });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return NextResponse.json<DatastoreResponse>({ error: message }, { status: 500 });
   }
 }
