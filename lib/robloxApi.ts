@@ -1,5 +1,4 @@
 import axios from 'axios';
-import crypto from 'crypto';
 
 export async function getDatastores(universeId: string, apiToken: string) {
   const apiUrl = `https://apis.roblox.com/datastores/v1/universes/${universeId}/standard-datastores`;
@@ -54,14 +53,13 @@ export async function setDataStoreEntry(
   apiToken: string,
   datastoreName: string,
   entryKey: string,
-  value: any,             // your data object
-  matchVersion?: string,  // optional
+  value: any,
+  matchVersion?: string,
   exclusiveCreate?: boolean,
   scope = ''
 ) {
   const apiUrl = `https://apis.roblox.com/datastores/v1/universes/${universeId}/standard-datastores/datastore/entries/entry`;
   const jsonValue = JSON.stringify(value);
-  const md5 = crypto.createHash('md5').update(jsonValue).digest('base64');
   const params: any = { datastoreName, entryKey, scope };
   if (matchVersion) params.matchVersion = matchVersion;
   if (exclusiveCreate !== undefined) params.exclusiveCreate = exclusiveCreate;
@@ -70,7 +68,6 @@ export async function setDataStoreEntry(
     headers: {
       'x-api-key': apiToken,
       'Content-Type': 'application/json',
-      'content-md5': md5,
     },
     params,
   });
