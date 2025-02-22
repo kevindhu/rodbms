@@ -1,12 +1,32 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/components/ui/use-toast";
 import dynamic from "next/dynamic";
 
-const MonacoEditor = dynamic(() => import("@monaco-editor/react"), { ssr: false });
+// Import Monaco Editor with loading state
+const MonacoEditor = dynamic(
+  () => {
+    console.log("Loading Monaco Editor...");
+    return import("@monaco-editor/react").then((mod) => {
+      console.log("Monaco Editor loaded successfully");
+      return mod.default;
+    });
+  },
+  {
+    ssr: false,
+    loading: () => {
+      console.log("Showing loading state...");
+      return (
+        <div className="h-[400px] w-full flex items-center justify-center bg-slate-100 rounded-md">
+          <p>Loading Editor...</p>
+        </div>
+      );
+    },
+  }
+);
 
 interface VersionInfo {
   version: string;
@@ -34,26 +54,48 @@ export default function EntryDetailEditor({
   const [versions, setVersions] = useState<VersionInfo[]>([]);
   const [showVersions, setShowVersions] = useState(false);
 
-  useEffect(() => {
-    fetchEntryDetail();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  console.log("EntryDetailEditor render:", {
+    entryKey,
+    datastoreName,
+    hasData: !!entryData,
+  });
 
-  /** Fetch the current entry data and load into editor. */
-  async function fetchEntryDetail() {
+  const fetchEntryDetail = useCallback(async () => {
+    console.log("Fetching entry detail for:", entryKey);
     const url = `/api/datastores/${encodeURIComponent(
       datastoreName
     )}/entry?universeId=${universeId}&apiToken=${apiToken}&entryKey=${entryKey}`;
-    const res = await fetch(url);
-    const data = await res.json();
-    if (data.error) {
-      toast("Error", "Failed to fetch entry: " + data.error, {
+    
+    try {
+      const res = await fetch(url);
+      const data = await res.json();
+      console.log("Fetched entry data:", data);
+      
+      if (data.error) {
+        console.error("Entry fetch error:", data.error);
+        toast("Error", "Failed to fetch entry: " + data.error, {
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      const formattedData = JSON.stringify(data, null, 2);
+      console.log("Setting formatted data:", formattedData.slice(0, 100) + "...");
+      setEntryData(formattedData);
+    } catch (error) {
+      console.error("Fetch error:", error);
+      toast("Error", "Failed to fetch entry", {
         variant: "destructive",
       });
-      return;
     }
-    setEntryData(JSON.stringify(data, null, 2));
-  }
+  }, [universeId, apiToken, datastoreName, entryKey, toast]);
+
+  useEffect(() => {
+    console.log("useEffect triggered with entryKey:", entryKey);
+    if (entryKey) {
+      fetchEntryDetail();
+    }
+  }, [entryKey, fetchEntryDetail]);
 
   /** Save the current editor contents back to the Roblox datastore. */
   async function handleSave() {
@@ -175,18 +217,33 @@ export default function EntryDetailEditor({
           </div>
         )}
 
-        <MonacoEditor
-          height="400px"
-          language="json"
-          theme="vs-dark"
-          value={entryData}
-          onChange={(value) => setEntryData(value || "")}
-          options={{
-            minimap: { enabled: false },
-            scrollBeyondLastLine: false,
-            fontSize: 14,
-          }}
-        />
+        <div className="min-h-[400px] w-full border rounded-md overflow-hidden">
+          {entryData ? (
+            <MonacoEditor
+              height="400px"
+              language="json"
+              theme="vs-dark"
+              value={entryData}
+              onChange={(value) => {
+                console.log("Editor value changed:", value?.slice(0, 100) + "...");
+                setEntryData(value || "");
+              }}
+              onMount={(editor, monaco) => {
+                console.log("Monaco Editor mounted");
+              }}
+              options={{
+                minimap: { enabled: false },
+                scrollBeyondLastLine: false,
+                fontSize: 14,
+                automaticLayout: true,
+              }}
+            />
+          ) : (
+            <div className="h-[400px] w-full flex items-center justify-center bg-slate-100 rounded-md">
+              <p>Loading data...</p>
+            </div>
+          )}
+        </div>
       </CardContent>
     </Card>
   );

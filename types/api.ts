@@ -1,6 +1,5 @@
 export interface DatastoreEntry {
   key: string;
-  value?: unknown;
 }
 
 export interface DatastoreVersion {
@@ -10,8 +9,13 @@ export interface DatastoreVersion {
   createdTime: string;
 }
 
+interface DatastoreInfo {
+  name: string;
+  createdTime: string;
+}
+
 export interface DatastoreResponse {
-  datastores?: string[];
+  datastores?: DatastoreInfo[];
   keys?: string[];
   entries?: DatastoreEntry[];
   versions?: DatastoreVersion[];

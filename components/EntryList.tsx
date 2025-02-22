@@ -50,8 +50,12 @@ export default function EntryList({
           throw new Error(data.error);
         }
 
+        const formattedEntries = (data.keys || []).map((k: { key: string }) => ({
+          key: k.key
+        }));
+
         setEntries((prev: DatastoreEntry[]) =>
-          newSearch ? data.entries || [] : [...prev, ...(data.entries || [])]
+          newSearch ? formattedEntries : [...prev, ...formattedEntries]
         );
         setCursor(data.nextPageCursor || "");
         setHasMore(!!data.nextPageCursor);
@@ -101,43 +105,48 @@ export default function EntryList({
     [fetchEntries, isLoading, hasMore, searchQuery]
   );
 
+  const handleEntrySelect = (key: string) => {
+    console.log('Selected entry:', key);
+    onSelectEntry(key);
+  };
+
   return (
     <Card className="shadow-lg hover:shadow-xl transition-shadow duration-300">
       <CardHeader className="bg-gradient-to-r from-indigo-500 to-purple-500">
         <CardTitle className="text-white">Entries</CardTitle>
       </CardHeader>
       <CardContent className="p-4">
-        <div className="mb-4">
+        <div className="space-y-4">
           <Input
             placeholder="Search entries..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full"
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              fetchEntries(e.target.value, true);
+            }}
           />
+          <ScrollArea className="h-[calc(100vh-400px)]">
+            <div className="space-y-2">
+              {entries.map((entry) => (
+                <Button
+                  key={entry.key}
+                  onClick={() => handleEntrySelect(entry.key)}
+                  variant={selectedEntryKey === entry.key ? "secondary" : "outline"}
+                  className="w-full justify-start text-left"
+                >
+                  {entry.key}
+                </Button>
+              ))}
+              {hasMore && (
+                <div ref={observerTarget} className="py-4 text-center">
+                  {isLoading && (
+                    <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
+                  )}
+                </div>
+              )}
+            </div>
+          </ScrollArea>
         </div>
-        <ScrollArea className="h-[calc(100vh-300px)]">
-          <div className="space-y-2">
-            {entries.map((entry) => (
-              <Button
-                key={entry.key}
-                onClick={() => onSelectEntry(entry.key)}
-                variant={
-                  selectedEntryKey === entry.key ? "secondary" : "outline"
-                }
-                className="w-full justify-start text-left"
-              >
-                {entry.key}
-              </Button>
-            ))}
-            {hasMore && (
-              <div ref={observerTarget} className="py-4 text-center">
-                {isLoading && (
-                  <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
-                )}
-              </div>
-            )}
-          </div>
-        </ScrollArea>
       </CardContent>
     </Card>
   );

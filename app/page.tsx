@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import EntryList from "@/components/EntryList";
+import EntryDetailEditor from "@/components/EntryDetailEditor";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 1) Define local types and context for toasts — but do NOT export them
@@ -55,8 +56,8 @@ function Toast({
     type === "success"
       ? "bg-green-500"
       : type === "error"
-      ? "bg-red-500"
-      : "bg-blue-500";
+        ? "bg-red-500"
+        : "bg-blue-500";
 
   return (
     <div className={`${bgColor} text-white p-3 rounded-md shadow-md mb-2`}>
@@ -122,7 +123,16 @@ export default function HomePage() {
       localStorage.setItem("universeId", universeId);
       localStorage.setItem("apiToken", apiToken);
 
-      setDatastores(data.datastores || []);
+      // console.log('Datastores types:', data.datastores.map((ds: any) => typeof ds));
+      // console.log('Raw datastores:', data.datastores);
+      // console.log('Stringified datastores:', data.datastores.map((ds: any) => JSON.stringify(ds)));
+
+
+      // @ts-expect-error Type 'DatastoreInfo[]' may be undefined
+      const sanitizedDatastores = data.datastores.map((ds: DatastoreInfo) => ds.name);
+
+      
+      setDatastores(sanitizedDatastores || []);
       setSelectedDatastore("");
       setSelectedEntryKey("");
       toast("Successfully connected!", "success");
@@ -241,13 +251,11 @@ export default function HomePage() {
                 </CardHeader>
                 <CardContent className="p-4">
                   <div className="space-y-2">
-                    {datastores.map((ds) => (
+                    {datastores.map((ds: string, index: number) => (
                       <Button
-                        key={ds}
+                        key={`datastore-${ds}-${index}`}
                         onClick={() => handleSelectDatastore(ds)}
-                        variant={
-                          selectedDatastore === ds ? "secondary" : "outline"
-                        }
+                        variant={selectedDatastore === ds ? "secondary" : "outline"}
                         className="w-full justify-start text-left"
                       >
                         {ds}
@@ -279,22 +287,12 @@ export default function HomePage() {
 
                   <TabsContent value="editor">
                     {selectedEntryKey && (
-                      <Card className="shadow-lg hover:shadow-xl transition-shadow duration-300">
-                        <CardHeader className="bg-gradient-to-r from-indigo-500 to-purple-500">
-                          <CardTitle className="text-white">
-                            Editing: {selectedEntryKey}
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent className="p-4">
-                          {/* If you have a MonacoEditor, place it here */}
-                          <Button
-                            onClick={handleSaveEntry}
-                            className="mt-4 bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white transition-all duration-300"
-                          >
-                            Save Changes
-                          </Button>
-                        </CardContent>
-                      </Card>
+                      <EntryDetailEditor
+                        universeId={universeId}
+                        apiToken={apiToken}
+                        datastoreName={selectedDatastore}
+                        entryKey={selectedEntryKey}
+                      />
                     )}
                   </TabsContent>
                 </Tabs>
