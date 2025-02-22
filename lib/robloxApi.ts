@@ -1,5 +1,4 @@
 import axios from 'axios';
-import type { DatastoreResponse } from '@/types/api';
 
 export async function getDatastores(universeId: string, apiToken: string) {
   const apiUrl = `https://apis.roblox.com/datastores/v1/universes/${universeId}/standard-datastores`;
@@ -49,6 +48,14 @@ export async function getDataStoreEntry(universeId: string, apiToken: string, da
   return response.data;
 }
 
+interface DataStoreParams {
+  datastoreName: string;
+  entryKey: string;
+  scope?: string;
+  matchVersion?: string;
+  exclusiveCreate?: boolean;
+}
+
 export async function setDataStoreEntry(
   universeId: string,
   apiToken: string,
@@ -61,7 +68,11 @@ export async function setDataStoreEntry(
 ) {
   const apiUrl = `https://apis.roblox.com/datastores/v1/universes/${universeId}/standard-datastores/datastore/entries/entry`;
   const jsonValue = JSON.stringify(value);
-  const params: any = { datastoreName, entryKey, scope };
+  const params: DataStoreParams = { 
+    datastoreName, 
+    entryKey, 
+    scope 
+  };
   if (matchVersion) params.matchVersion = matchVersion;
   if (exclusiveCreate !== undefined) params.exclusiveCreate = exclusiveCreate;
 

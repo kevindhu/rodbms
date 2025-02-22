@@ -5,39 +5,47 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import dynamic from "next/dynamic";
 import EntryList from "@/components/EntryList";
-// Removed unused: import EntryDetailEditor from "@/components/EntryDetailEditor";
-// Removed unused type: import type { DatastoreResponse, DatastoreEntry } from '@/types/api';
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 1) Define local types and context for toasts — but do NOT export them
+// ─────────────────────────────────────────────────────────────────────────────
 type ToastType = "success" | "error" | "info";
 
-interface Toast {
+interface ToastMessage {
   message: string;
   type: ToastType;
 }
 
 interface ToastContextType {
   toast: (message: string, type: ToastType) => void;
-  toasts: Toast[];
+  toasts: ToastMessage[];
   removeToast: (index: number) => void;
 }
 
 const ToastContext = createContext<ToastContextType | undefined>(undefined);
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 
-export const useToast = () => {
+function useToast() {
   const context = useContext(ToastContext);
   if (!context) {
     throw new Error("useToast must be used within a ToastProvider");
   }
   return context;
-};
+}
 
-const Toast: React.FC<{
+
+
+// Simple toast display component
+function Toast({
+  message,
+  type,
+  onClose,
+}: {
   message: string;
   type: ToastType;
   onClose: () => void;
-}> = ({ message, type, onClose }) => {
+}) {
   useEffect(() => {
     const timer = setTimeout(onClose, 3000);
     return () => clearTimeout(timer);
@@ -55,19 +63,28 @@ const Toast: React.FC<{
       {message}
     </div>
   );
-};
+}
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 2) The ONLY export is our default page component
+// ─────────────────────────────────────────────────────────────────────────────
 export default function HomePage() {
+  // Toast state
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
+
+  // Universe / API config
   const [universeId, setUniverseId] = useState("");
   const [apiToken, setApiToken] = useState("");
+
+  // Datastore state
   const [datastores, setDatastores] = useState<string[]>([]);
   const [selectedDatastore, setSelectedDatastore] = useState("");
-  // Removed unused entries state:
-  // const [entries, setEntries] = useState<DatastoreEntry[]>([]);
   const [selectedEntryKey, setSelectedEntryKey] = useState("");
   const [entryData, setEntryData] = useState("");
-  const [toasts, setToasts] = useState<Toast[]>([]);
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // Provide a local toast() function for children to call
+  // ─────────────────────────────────────────────────────────────────────────
   const toast = (message: string, type: ToastType) => {
     setToasts((prev) => [...prev, { message, type }]);
   };
@@ -76,11 +93,15 @@ export default function HomePage() {
     setToasts((prev) => prev.filter((_, i) => i !== index));
   };
 
+  // A quick JSON fetcher
   async function fetchJSON(url: string, options?: RequestInit) {
     const res = await fetch(url, options);
     return res.json();
   }
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // Handlers
+  // ─────────────────────────────────────────────────────────────────────────
   const handleListDatastores = async () => {
     if (!universeId || !apiToken) {
       toast("Please enter Universe ID and API Token", "error");
@@ -97,27 +118,26 @@ export default function HomePage() {
         return;
       }
 
+      // Save credentials to local storage
       localStorage.setItem("universeId", universeId);
       localStorage.setItem("apiToken", apiToken);
 
       setDatastores(data.datastores || []);
       setSelectedDatastore("");
       setSelectedEntryKey("");
-
       toast("Successfully connected!", "success");
-    } catch (error: unknown) {
-      const errorMessage =
-        error instanceof Error ? error.message : "Unknown error";
-      toast("Failed to connect: " + errorMessage, "error");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      toast("Failed to connect: " + message, "error");
     }
   };
 
   const handleSelectDatastore = async (name: string) => {
     setSelectedDatastore(name);
-    const data = await fetchJSON(
+    // Optionally fetch the datastore's entries (some folks do it in EntryList instead)
+    await fetchJSON(
       `/api/datastores/${encodeURIComponent(name)}?universeId=${universeId}&apiToken=${apiToken}`
     );
-    // EntryList will fetch its own entries, so no need to set entries here.
     setSelectedEntryKey("");
   };
 
@@ -155,13 +175,13 @@ export default function HomePage() {
       } else {
         toast("Entry saved successfully!", "success");
       }
-    } catch (err: unknown) {
-      const errorMessage =
-        err instanceof Error ? err.message : "Unknown error";
-      toast("JSON parse error: " + errorMessage, "error");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      toast("JSON parse error: " + message, "error");
     }
   };
 
+  // Restore Universe ID and API token from localStorage
   useEffect(() => {
     const savedUniverseId = localStorage.getItem("universeId");
     const savedApiToken = localStorage.getItem("apiToken");
@@ -172,6 +192,9 @@ export default function HomePage() {
     }
   }, []);
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // Render
+  // ─────────────────────────────────────────────────────────────────────────
   return (
     <ToastContext.Provider value={{ toast, toasts, removeToast }}>
       <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50">
@@ -211,6 +234,7 @@ export default function HomePage() {
 
           {datastores.length > 0 && (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+              {/* Datastore list */}
               <Card className="shadow-lg hover:shadow-xl transition-shadow duration-300">
                 <CardHeader className="bg-gradient-to-r from-indigo-500 to-purple-500">
                   <CardTitle className="text-white">Datastores</CardTitle>
@@ -233,6 +257,7 @@ export default function HomePage() {
                 </CardContent>
               </Card>
 
+              {/* Entry List & Editor */}
               <div className="md:col-span-2">
                 <Tabs defaultValue="entries" className="w-full">
                   <TabsList className="w-full justify-start mb-4">
@@ -261,7 +286,7 @@ export default function HomePage() {
                           </CardTitle>
                         </CardHeader>
                         <CardContent className="p-4">
-                          {/* MonacoEditor dynamically loaded */}
+                          {/* If you have a MonacoEditor, place it here */}
                           <Button
                             onClick={handleSaveEntry}
                             className="mt-4 bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white transition-all duration-300"
@@ -277,6 +302,8 @@ export default function HomePage() {
             </div>
           )}
         </div>
+
+        {/* Toast notifications */}
         <div className="fixed bottom-4 right-4 space-y-2">
           {toasts.map((t, index) => (
             <Toast

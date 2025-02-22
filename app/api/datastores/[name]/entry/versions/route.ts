@@ -3,7 +3,6 @@ import type { DatastoreResponse, ErrorResponse } from "@/types/api";
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { name: string } }
 ) {
   try {
     // Removed: const { name: datastoreName } = params;

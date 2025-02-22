@@ -47,9 +47,7 @@ export default function EntryDetailEditor({
     const res = await fetch(url);
     const data = await res.json();
     if (data.error) {
-      toast({
-        title: "Error",
-        description: "Failed to fetch entry: " + data.error,
+      toast("Error", "Failed to fetch entry: " + data.error, {
         variant: "destructive",
       });
       return;
@@ -76,21 +74,14 @@ export default function EntryDetailEditor({
       );
       const result = await res.json();
       if (result.error) {
-        toast({
-          title: "Error",
-          description: "Failed to save: " + result.error,
+        toast("Error", "Failed to save: " + result.error, {
           variant: "destructive",
         });
       } else {
-        toast({
-          title: "Success",
-          description: "Entry saved successfully!",
-        });
+        toast("Success", "Entry saved successfully!", {});
       }
     } catch (err) {
-      toast({
-        title: "Error",
-        description: "JSON parse error: " + err,
+      toast("Error", "JSON parse error: " + err, {
         variant: "destructive",
       });
     }
@@ -112,9 +103,7 @@ export default function EntryDetailEditor({
       const res = await fetch(url);
       const data = await res.json();
       if (data.error) {
-        toast({
-          title: "Error",
-          description: "Failed to fetch versions: " + data.error,
+        toast("Error", "Failed to fetch versions: " + data.error, {
           variant: "destructive",
         });
         return;
@@ -135,18 +124,13 @@ export default function EntryDetailEditor({
     const res = await fetch(url);
     const data = await res.json();
     if (data.error) {
-      toast({
-        title: "Error",
-        description: "Failed to load version: " + data.error,
+      toast("Error", "Failed to load version: " + data.error, {
         variant: "destructive",
       });
       return;
     }
     setEntryData(JSON.stringify(data, null, 2));
-    toast({
-      title: "Version Loaded",
-      description: "You can now save to overwrite the current data with this version.",
-    });
+    toast("Version Loaded", "You can now save to overwrite the current data with this version.", {});
   }
 
   return (
@@ -165,7 +149,6 @@ export default function EntryDetailEditor({
           <Button variant="outline" onClick={handleToggleVersions} className="bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white transition-all duration-300"
           >
             {showVersions ? "Hide Versions" : "Show Versions"}
-            lol
           </Button>
         </div>
 

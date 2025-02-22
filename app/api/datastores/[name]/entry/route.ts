@@ -9,10 +9,10 @@ import type { DatastoreResponse, ErrorResponse } from "@/types/api";
 // GET: Fetch a single entry's data
 export async function GET(
   req: NextRequest,
-  context: { params: { name: string } }
+  { params }: { params: Promise<{ name: string }> }
 ) {
   try {
-    const { name: datastoreName } = context.params;
+    const { name: datastoreName } = await params;
     const { searchParams } = new URL(req.url);
     const universeId = searchParams.get("universeId");
     const apiToken = searchParams.get("apiToken");
@@ -47,9 +47,9 @@ export async function GET(
 // POST: Set (create/update) an entry
 export async function POST(
   req: NextRequest,
-  context: { params: { name: string } }
+  { params }: { params: Promise<{ name: string }> }
 ) {
-  const { name: datastoreName } = context.params; // removed unnecessary await
+  const { name: datastoreName } = await params;
   const { searchParams } = new URL(req.url);
   const universeId = searchParams.get("universeId");
   const apiToken = searchParams.get("apiToken");
@@ -91,9 +91,9 @@ export async function POST(
 // DELETE: Delete an entry
 export async function DELETE(
   req: NextRequest,
-  context: { params: { name: string } }
+  { params }: { params: Promise<{ name: string }> }
 ) {
-  const { name: datastoreName } = context.params; // removed unnecessary await
+  const { name: datastoreName } = await params;
   const { searchParams } = new URL(req.url);
   const universeId = searchParams.get("universeId");
   const apiToken = searchParams.get("apiToken");

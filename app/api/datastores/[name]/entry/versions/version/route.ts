@@ -3,9 +3,9 @@ import { getEntryVersion } from "@/lib/robloxApi";
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { name: string } }
+  { params }: { params: Promise<{ name: string }> }
 ) {
-  const { name: datastoreName } = params;
+  const { name: datastoreName } = await params;
   const { searchParams } = new URL(req.url);
   const universeId = searchParams.get("universeId");
   const apiToken = searchParams.get("apiToken");
