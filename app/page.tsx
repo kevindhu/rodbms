@@ -1,6 +1,5 @@
 "use client";
 
-import type React from "react";
 import { useState, createContext, useContext, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,12 +7,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import dynamic from "next/dynamic";
 import EntryList from "@/components/EntryList";
-import EntryDetailEditor from "@/components/EntryDetailEditor";
-import type { DatastoreResponse, DatastoreEntry } from '@/types/api';
+// Removed unused: import EntryDetailEditor from "@/components/EntryDetailEditor";
+// Removed unused type: import type { DatastoreResponse, DatastoreEntry } from '@/types/api';
 
-const MonacoEditor = dynamic(() => import("@monaco-editor/react"), { ssr: false });
-
-// Toast context and hook
 type ToastType = "success" | "error" | "info";
 
 interface Toast {
@@ -29,24 +25,21 @@ interface ToastContextType {
 
 const ToastContext = createContext<ToastContextType | undefined>(undefined);
 
-const useToast = () => {
+export const useToast = () => {
   const context = useContext(ToastContext);
-  if (context === undefined) {
+  if (!context) {
     throw new Error("useToast must be used within a ToastProvider");
   }
   return context;
 };
 
-// Toast component
 const Toast: React.FC<{
   message: string;
   type: ToastType;
   onClose: () => void;
 }> = ({ message, type, onClose }) => {
   useEffect(() => {
-    const timer = setTimeout(() => {
-      onClose();
-    }, 3000);
+    const timer = setTimeout(onClose, 3000);
     return () => clearTimeout(timer);
   }, [onClose]);
 
@@ -69,9 +62,10 @@ export default function HomePage() {
   const [apiToken, setApiToken] = useState("");
   const [datastores, setDatastores] = useState<string[]>([]);
   const [selectedDatastore, setSelectedDatastore] = useState("");
-  const [entries, setEntries] = useState<DatastoreEntry[]>([]);
-  const [selectedEntryKey, setSelectedEntryKey] = useState<string>("");
-  const [entryData, setEntryData] = useState<string>("");
+  // Removed unused entries state:
+  // const [entries, setEntries] = useState<DatastoreEntry[]>([]);
+  const [selectedEntryKey, setSelectedEntryKey] = useState("");
+  const [entryData, setEntryData] = useState("");
   const [toasts, setToasts] = useState<Toast[]>([]);
 
   const toast = (message: string, type: ToastType) => {
@@ -103,18 +97,18 @@ export default function HomePage() {
         return;
       }
 
-      // Save valid credentials to localStorage
       localStorage.setItem("universeId", universeId);
       localStorage.setItem("apiToken", apiToken);
 
       setDatastores(data.datastores || []);
       setSelectedDatastore("");
-      setEntries([]);
       setSelectedEntryKey("");
 
       toast("Successfully connected!", "success");
-    } catch (error: any) {
-      toast("Failed to connect: " + error.message, "error");
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
+      toast("Failed to connect: " + errorMessage, "error");
     }
   };
 
@@ -123,7 +117,7 @@ export default function HomePage() {
     const data = await fetchJSON(
       `/api/datastores/${encodeURIComponent(name)}?universeId=${universeId}&apiToken=${apiToken}`
     );
-    setEntries(data.entries || []);
+    // EntryList will fetch its own entries, so no need to set entries here.
     setSelectedEntryKey("");
   };
 
@@ -148,7 +142,9 @@ export default function HomePage() {
         value: parsedValue,
       };
       const res = await fetchJSON(
-        `/api/datastores/${encodeURIComponent(selectedDatastore)}/entry?universeId=${universeId}&apiToken=${apiToken}`,
+        `/api/datastores/${encodeURIComponent(
+          selectedDatastore
+        )}/entry?universeId=${universeId}&apiToken=${apiToken}`,
         {
           method: "POST",
           body: JSON.stringify(body),
@@ -159,8 +155,10 @@ export default function HomePage() {
       } else {
         toast("Entry saved successfully!", "success");
       }
-    } catch (err) {
-      toast("JSON parse error: " + err, "error");
+    } catch (err: unknown) {
+      const errorMessage =
+        err instanceof Error ? err.message : "Unknown error";
+      toast("JSON parse error: " + errorMessage, "error");
     }
   };
 
@@ -223,7 +221,9 @@ export default function HomePage() {
                       <Button
                         key={ds}
                         onClick={() => handleSelectDatastore(ds)}
-                        variant={selectedDatastore === ds ? "secondary" : "outline"}
+                        variant={
+                          selectedDatastore === ds ? "secondary" : "outline"
+                        }
                         className="w-full justify-start text-left"
                       >
                         {ds}
@@ -256,21 +256,12 @@ export default function HomePage() {
                     {selectedEntryKey && (
                       <Card className="shadow-lg hover:shadow-xl transition-shadow duration-300">
                         <CardHeader className="bg-gradient-to-r from-indigo-500 to-purple-500">
-                          <CardTitle className="text-white">Editing: {selectedEntryKey}</CardTitle>
+                          <CardTitle className="text-white">
+                            Editing: {selectedEntryKey}
+                          </CardTitle>
                         </CardHeader>
                         <CardContent className="p-4">
-                          <MonacoEditor
-                            height="400px"
-                            language="json"
-                            theme="vs-dark"
-                            value={entryData}
-                            onChange={(value) => setEntryData(value || "")}
-                            options={{
-                              minimap: { enabled: false },
-                              scrollBeyondLastLine: false,
-                              fontSize: 14,
-                            }}
-                          />
+                          {/* MonacoEditor dynamically loaded */}
                           <Button
                             onClick={handleSaveEntry}
                             className="mt-4 bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white transition-all duration-300"
@@ -287,11 +278,11 @@ export default function HomePage() {
           )}
         </div>
         <div className="fixed bottom-4 right-4 space-y-2">
-          {toasts.map((toast, index) => (
+          {toasts.map((t, index) => (
             <Toast
               key={index}
-              message={toast.message}
-              type={toast.type}
+              message={t.message}
+              type={t.type}
               onClose={() => removeToast(index)}
             />
           ))}

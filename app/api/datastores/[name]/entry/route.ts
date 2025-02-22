@@ -1,31 +1,27 @@
-// app/api/datastores/[name]/entry/route.ts
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from "next/server";
 import {
   getDataStoreEntry,
   setDataStoreEntry,
   deleteDataStoreEntry,
-} from '@/lib/robloxApi';
-import type { DatastoreResponse, ErrorResponse } from '@/types/api';
+} from "@/lib/robloxApi";
+import type { DatastoreResponse, ErrorResponse } from "@/types/api";
 
-/**
- * GET => Fetch a single entry's data
- * POST => Set (create/update) an entry
- * DELETE => Delete an entry
- */
-
-// Example fix for GET:
-export async function GET(req: NextRequest, context: { params: { name: string } }) {
+// GET: Fetch a single entry's data
+export async function GET(
+  req: NextRequest,
+  context: { params: { name: string } }
+) {
   try {
     const { name: datastoreName } = context.params;
     const { searchParams } = new URL(req.url);
-    const universeId = searchParams.get('universeId');
-    const apiToken = searchParams.get('apiToken');
-    const entryKey = searchParams.get('entryKey') || '';
-    const scope = searchParams.get('scope') || '';
+    const universeId = searchParams.get("universeId");
+    const apiToken = searchParams.get("apiToken");
+    const entryKey = searchParams.get("entryKey") || "";
+    const scope = searchParams.get("scope") || "";
 
     if (!universeId || !apiToken || !entryKey) {
       return NextResponse.json<ErrorResponse>(
-        { error: 'Missing universeId, apiToken, or entryKey' },
+        { error: "Missing universeId, apiToken, or entryKey" },
         { status: 400 }
       );
     }
@@ -39,30 +35,36 @@ export async function GET(req: NextRequest, context: { params: { name: string } 
     );
     return NextResponse.json<DatastoreResponse>(data);
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    return NextResponse.json<ErrorResponse>({ error: message }, { status: 500 });
+    const message =
+      error instanceof Error ? error.message : "Unknown error";
+    return NextResponse.json<ErrorResponse>(
+      { error: message },
+      { status: 500 }
+    );
   }
 }
 
-// Example fix for POST:
-export async function POST(req: NextRequest, context: { params: { name: string } }) {
-  const { name: datastoreName } = await context.params;
+// POST: Set (create/update) an entry
+export async function POST(
+  req: NextRequest,
+  context: { params: { name: string } }
+) {
+  const { name: datastoreName } = context.params; // removed unnecessary await
   const { searchParams } = new URL(req.url);
-  const universeId = searchParams.get('universeId');
-  const apiToken = searchParams.get('apiToken');
+  const universeId = searchParams.get("universeId");
+  const apiToken = searchParams.get("apiToken");
 
   if (!universeId || !apiToken) {
     return NextResponse.json(
-      { error: 'Missing universeId or apiToken' },
+      { error: "Missing universeId or apiToken" },
       { status: 400 }
     );
   }
 
-  // Body: { entryKey, value, scope?, matchVersion?, exclusiveCreate? }
   const body = await req.json();
   if (!body.entryKey || body.value === undefined) {
     return NextResponse.json(
-      { error: 'Missing entryKey or value' },
+      { error: "Missing entryKey or value" },
       { status: 400 }
     );
   }
@@ -76,26 +78,31 @@ export async function POST(req: NextRequest, context: { params: { name: string }
       body.value,
       body.matchVersion,
       body.exclusiveCreate,
-      body.scope || ''
+      body.scope || ""
     );
     return NextResponse.json(result);
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err: unknown) {
+    const errorMessage =
+      err instanceof Error ? err.message : "Unknown error";
+    return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }
 
-// Example fix for DELETE:
-export async function DELETE(req: NextRequest, context: { params: { name: string } }) {
-  const { name: datastoreName } = await context.params;
+// DELETE: Delete an entry
+export async function DELETE(
+  req: NextRequest,
+  context: { params: { name: string } }
+) {
+  const { name: datastoreName } = context.params; // removed unnecessary await
   const { searchParams } = new URL(req.url);
-  const universeId = searchParams.get('universeId');
-  const apiToken = searchParams.get('apiToken');
-  const entryKey = searchParams.get('entryKey') || '';
-  const scope = searchParams.get('scope') || '';
+  const universeId = searchParams.get("universeId");
+  const apiToken = searchParams.get("apiToken");
+  const entryKey = searchParams.get("entryKey") || "";
+  const scope = searchParams.get("scope") || "";
 
   if (!universeId || !apiToken || !entryKey) {
     return NextResponse.json(
-      { error: 'Missing universeId, apiToken, or entryKey' },
+      { error: "Missing universeId, apiToken, or entryKey" },
       { status: 400 }
     );
   }
@@ -109,7 +116,9 @@ export async function DELETE(req: NextRequest, context: { params: { name: string
       scope
     );
     return NextResponse.json(result);
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err: unknown) {
+    const errorMessage =
+      err instanceof Error ? err.message : "Unknown error";
+    return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }

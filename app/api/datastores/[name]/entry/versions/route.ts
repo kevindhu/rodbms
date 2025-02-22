@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import type { DatastoreResponse, ErrorResponse } from '@/types/api';
+import type { DatastoreResponse, ErrorResponse } from "@/types/api";
 
 export async function GET(
-  req: NextRequest, 
+  req: NextRequest,
   { params }: { params: { name: string } }
 ) {
   try {
-    const { name: datastoreName } = params;
+    // Removed: const { name: datastoreName } = params;
     const { searchParams } = new URL(req.url);
     const universeId = searchParams.get("universeId");
     const apiToken = searchParams.get("apiToken");
@@ -14,7 +14,7 @@ export async function GET(
 
     if (!universeId || !apiToken || !entryKey) {
       return NextResponse.json<ErrorResponse>(
-        { error: 'Missing required parameters' },
+        { error: "Missing required parameters" },
         { status: 400 }
       );
     }
@@ -23,19 +23,23 @@ export async function GET(
     const res = await fetch(robloxUrl, {
       headers: {
         "x-api-key": apiToken,
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
       },
-      next: { revalidate: 0 }
+      next: { revalidate: 0 },
     });
 
     const robloxData = await res.json();
 
     return NextResponse.json<DatastoreResponse>({
       versions: robloxData.data || [],
-      nextPageCursor: robloxData.nextPageCursor || ""
+      nextPageCursor: robloxData.nextPageCursor || "",
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    return NextResponse.json<ErrorResponse>({ error: message }, { status: 500 });
+    const message =
+      error instanceof Error ? error.message : "Unknown error";
+    return NextResponse.json<ErrorResponse>(
+      { error: message },
+      { status: 500 }
+    );
   }
 }

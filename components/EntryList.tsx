@@ -1,11 +1,11 @@
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import { Input } from "@/components/ui/input"
-import { useState, useEffect, useCallback } from "react"
-import { useToast } from "@/components/ui/use-toast"
-import { Loader2 } from "lucide-react"
-import type { EntryListProps, DatastoreEntry } from '@/types/api'
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Input } from "@/components/ui/input";
+import { useState, useEffect, useCallback } from "react";
+import { useToast } from "@/components/ui/use-toast";
+import { Loader2 } from "lucide-react";
+import type { DatastoreEntry } from "@/types/api"; // Removed unused EntryListProps
 
 interface ExtendedEntryListProps {
   universeId: string;
@@ -15,87 +15,91 @@ interface ExtendedEntryListProps {
   onSelectEntry: (key: string) => void;
 }
 
-export default function EntryList({ 
-  universeId, 
-  apiToken, 
-  datastoreName, 
-  selectedEntryKey, 
-  onSelectEntry 
+export default function EntryList({
+  universeId,
+  apiToken,
+  datastoreName,
+  selectedEntryKey,
+  onSelectEntry,
 }: ExtendedEntryListProps) {
-  const [entries, setEntries] = useState<DatastoreEntry[]>([])
-  const [searchQuery, setSearchQuery] = useState("")
-  const [isLoading, setIsLoading] = useState(false)
-  const [cursor, setCursor] = useState<string>("")
-  const [hasMore, setHasMore] = useState(true)
-  const { toast } = useToast()
+  const [entries, setEntries] = useState<DatastoreEntry[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [cursor, setCursor] = useState<string>("");
+  const [hasMore, setHasMore] = useState(true);
+  const { toast } = useToast();
 
-  const fetchEntries = useCallback(async (searchValue: string, newSearch: boolean = false) => {
-    try {
-      setIsLoading(true)
-      const currentCursor = newSearch ? "" : cursor
-      
-      const params = new URLSearchParams({
-        universeId: universeId,
-        apiToken: apiToken,
-        prefix: searchValue,
-        ...(currentCursor && { cursor: currentCursor })
-      })
+  const fetchEntries = useCallback(
+    async (searchValue: string, newSearch: boolean = false) => {
+      try {
+        setIsLoading(true);
+        const currentCursor = newSearch ? "" : cursor;
+        const params = new URLSearchParams({
+          universeId,
+          apiToken,
+          prefix: searchValue,
+          ...(currentCursor && { cursor: currentCursor }),
+        });
 
-      const response = await fetch(`/api/datastores/${encodeURIComponent(datastoreName)}?${params}`)
-      const data = await response.json()
+        const response = await fetch(
+          `/api/datastores/${encodeURIComponent(datastoreName)}?${params}`
+        );
+        const data = await response.json();
 
-      if (data.error) {
-        throw new Error(data.error)
+        if (data.error) {
+          throw new Error(data.error);
+        }
+
+        setEntries((prev: DatastoreEntry[]) =>
+          newSearch ? data.entries || [] : [...prev, ...(data.entries || [])]
+        );
+        setCursor(data.nextPageCursor || "");
+        setHasMore(!!data.nextPageCursor);
+      } catch (error: unknown) {
+        const errorMessage =
+          error instanceof Error ? error.message : "Unknown error";
+        toast("Error: " + errorMessage, "error", { duration: 3000 });
+      } finally {
+        setIsLoading(false);
       }
+    },
+    [cursor, toast, datastoreName, universeId, apiToken]
+  );
 
-      setEntries((prev: any) => newSearch ? (data.entries || []) : [...prev, ...(data.entries || [])])
-      setCursor(data.nextPageCursor || "")
-      setHasMore(!!data.nextPageCursor)
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive"
-      })
-    } finally {
-      setIsLoading(false)
-    }
-  }, [entries, cursor, toast, datastoreName, universeId, apiToken])
-
-  // Initial load effect
   useEffect(() => {
     if (datastoreName) {
-      fetchEntries("", true)
+      fetchEntries("", true);
     }
-  }, [datastoreName]);
+  }, [datastoreName, fetchEntries]);
 
-  // Search effect with debounce
   useEffect(() => {
     const timer = setTimeout(() => {
       if (datastoreName) {
-        fetchEntries(searchQuery, true)
+        fetchEntries(searchQuery, true);
       }
-    }, 500)
+    }, 500);
 
-    return () => clearTimeout(timer)
-  }, [searchQuery, fetchEntries, datastoreName])
+    return () => clearTimeout(timer);
+  }, [searchQuery, fetchEntries, datastoreName]);
 
-  // Intersection Observer for infinite scroll
-  const observerTarget = useCallback((node: HTMLDivElement) => {
-    if (!node || isLoading || !hasMore) return;
+  const observerTarget = useCallback(
+    (node: HTMLDivElement) => {
+      if (!node || isLoading || !hasMore) return;
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting) {
-          fetchEntries(searchQuery)
-        }
-      },
-      { threshold: 1.0 }
-    );
+      const observer = new IntersectionObserver(
+        (entriesObs) => {
+          if (entriesObs[0].isIntersecting) {
+            fetchEntries(searchQuery);
+          }
+        },
+        { threshold: 1.0 }
+      );
 
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [fetchEntries, isLoading, hasMore, searchQuery]);
+      observer.observe(node);
+      return () => observer.disconnect();
+    },
+    [fetchEntries, isLoading, hasMore, searchQuery]
+  );
 
   return (
     <Card className="shadow-lg hover:shadow-xl transition-shadow duration-300">
@@ -117,7 +121,9 @@ export default function EntryList({
               <Button
                 key={entry.key}
                 onClick={() => onSelectEntry(entry.key)}
-                variant={selectedEntryKey === entry.key ? "secondary" : "outline"}
+                variant={
+                  selectedEntryKey === entry.key ? "secondary" : "outline"
+                }
                 className="w-full justify-start text-left"
               >
                 {entry.key}
@@ -134,6 +140,5 @@ export default function EntryList({
         </ScrollArea>
       </CardContent>
     </Card>
-  )
+  );
 }
-
