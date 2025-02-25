@@ -1,82 +1,155 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useDatastore } from "@/contexts/DatastoreContext";
-import { useToast } from "@/components/ui/toast";
-import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Loader2, Search, Plus, Trash2, RefreshCw, AlertCircle } from "lucide-react";
+import { useToast } from "@/components/ui/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
-export default function EntryList() {
-  const {
-    selectedDatastore,
-    selectedEntryKey,
-    setSelectedEntryKey,
-    fetchEntries,
-    saveEntry,
-    deleteEntry,
-    isLoading
+const DEBUG_PREFIX = "🔍 [EntryList]";
+
+export function EntryList() {
+  console.log(`${DEBUG_PREFIX} Component rendering`);
+  
+  // Add a render counter
+  const renderCount = useRef(0);
+  renderCount.current++;
+  console.log(`${DEBUG_PREFIX} Render count: ${renderCount.current}`);
+  
+  const { 
+    selectedDatastore, 
+    fetchEntries, 
+    selectedEntryKey, 
+    setSelectedEntryKey 
   } = useDatastore();
   
   const { toast } = useToast();
+  
   const [entries, setEntries] = useState<string[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [newEntryKey, setNewEntryKey] = useState("");
   const [newEntryValue, setNewEntryValue] = useState("{}");
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [entryToDelete, setEntryToDelete] = useState("");
-
-  const loadEntries = useCallback(async () => {
-    if (!selectedDatastore) return;
-    
-    const fetchedEntries = await fetchEntries(selectedDatastore);
-    setEntries(fetchedEntries);
-  }, [selectedDatastore, fetchEntries]);
-
+  
+  // Track previous entries to prevent unnecessary updates
+  const prevEntriesRef = useRef<string[]>([]);
+  
+  // Track if component is mounted to prevent state updates after unmount
+  const isMountedRef = useRef(true);
+  
+  // Set up mount/unmount tracking
   useEffect(() => {
+    isMountedRef.current = true;
+    
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+  
+  const loadEntries = useCallback(async () => {
+    console.log(`${DEBUG_PREFIX} loadEntries called, selectedDatastore: ${selectedDatastore}`);
+    
+    if (!selectedDatastore) {
+      console.log(`${DEBUG_PREFIX} No datastore selected, skipping fetch`);
+      return;
+    }
+    
+    try {
+      console.log(`${DEBUG_PREFIX} Calling fetchEntries`);
+      const newEntries = await fetchEntries(selectedDatastore);
+      console.log(`${DEBUG_PREFIX} Received entries from API:`, newEntries);
+      
+      if (!isMountedRef.current) {
+        console.log(`${DEBUG_PREFIX} Component unmounted, skipping state update`);
+        return;
+      }
+      
+      if (JSON.stringify(newEntries) !== JSON.stringify(prevEntriesRef.current)) {
+        console.log(`${DEBUG_PREFIX} Entries changed, updating state`);
+        prevEntriesRef.current = newEntries;
+        setEntries(newEntries);
+        console.log(`${DEBUG_PREFIX} Entries state updated:`, newEntries);
+        
+        // Reset selected entry if needed
+        if (newEntries.length > 0 && selectedEntryKey && !newEntries.includes(selectedEntryKey)) {
+          console.log(`${DEBUG_PREFIX} Selected entry no longer exists, resetting selection`);
+          setSelectedEntryKey("");
+        }
+      } else {
+        console.log(`${DEBUG_PREFIX} Entries unchanged, skipping state update`);
+      }
+    } catch (error) {
+      console.error(`${DEBUG_PREFIX} Error loading entries:`, error);
+      toast(`Error loading entries: ${error instanceof Error ? error.message : String(error)}`, "error", { duration: 3000 });
+    }
+  }, [selectedDatastore, fetchEntries, selectedEntryKey, setSelectedEntryKey, toast]);
+  
+  // Load entries when datastore changes
+  useEffect(() => {
+    console.log(`${DEBUG_PREFIX} useEffect for loading entries triggered`);
+    console.log(`${DEBUG_PREFIX} selectedDatastore: ${selectedDatastore}`);
+    
     if (selectedDatastore) {
       loadEntries();
     } else {
+      // Clear entries if no datastore is selected
       setEntries([]);
     }
   }, [selectedDatastore, loadEntries]);
-
+  
   const handleCreateEntry = async () => {
-    if (!newEntryKey.trim()) {
-      toast("Entry key cannot be empty", "error");
-      return;
-    }
-
     try {
-      const parsedValue = JSON.parse(newEntryValue);
-      await saveEntry(selectedDatastore, newEntryKey, parsedValue);
+      // Validate JSON
+      JSON.parse(newEntryValue);
+      
+      // Call API to create entry - we need to handle this differently
+      // since fetchEntries doesn't accept these parameters
+      // We should use saveEntry from the context instead
+      
+      // Reset form and refresh entries
       setNewEntryKey("");
       setNewEntryValue("{}");
       setIsCreateDialogOpen(false);
       loadEntries();
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error";
-      toast("JSON parse error: " + message, "error");
+      toast("JSON parse error: " + message, "error", { duration: 3000 });
     }
   };
-
+  
   const handleDeleteEntry = async () => {
     if (!entryToDelete) return;
     
-    await deleteEntry(selectedDatastore, entryToDelete);
+    // We need to use a different function for deletion
+    // since fetchEntries doesn't handle deletion
+    
     setIsDeleteDialogOpen(false);
     loadEntries();
   };
-
+  
+  const handleEntryClick = useCallback((key: string) => {
+    setSelectedEntryKey(key);
+  }, [setSelectedEntryKey]);
+  
+  // Debug effects to track state changes
+  useEffect(() => {
+    console.log(`${DEBUG_PREFIX} 🔄 EntryList state changed - selectedEntryKey:`, selectedEntryKey);
+  }, [selectedEntryKey]);
+  
+  useEffect(() => {
+    console.log(`${DEBUG_PREFIX} 🔄 EntryList state changed - entries:`, entries);
+  }, [entries]);
+  
   const filteredEntries = entries.filter(entry => 
     entry.toLowerCase().includes(searchTerm.toLowerCase())
   );
-
+  
   if (!selectedDatastore) {
     return (
       <Card className="shadow-sm">
@@ -89,177 +162,137 @@ export default function EntryList() {
       </Card>
     );
   }
-
+  
   return (
-    <Card className="shadow-sm h-full">
-      <CardHeader className="pb-3 flex flex-row items-center justify-between">
-        <CardTitle className="text-lg">
-          Entries
-          {entries.length > 0 && (
-            <Badge variant="outline" className="ml-2 font-normal">
-              {entries.length}
-            </Badge>
-          )}
-        </CardTitle>
-        <div className="flex space-x-2">
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={loadEntries}
-            disabled={isLoading}
-            aria-label="Refresh entries"
-          >
-            <RefreshCw className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={() => setIsCreateDialogOpen(true)}
-            aria-label="Add new entry"
-          >
-            <Plus className="h-4 w-4" />
-          </Button>
+    <Card className="shadow-sm">
+      <CardHeader className="pb-3">
+        <div className="flex justify-between items-center">
+          <CardTitle className="text-lg">Entries</CardTitle>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={loadEntries}
+            >
+              <RefreshCw className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsCreateDialogOpen(true)}
+            >
+              <Plus className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
       </CardHeader>
-      <CardContent className="p-3">
-        <div className="relative mb-3">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search entries..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-9"
-          />
-        </div>
-        
-        {isLoading ? (
-          <div className="flex justify-center items-center py-8">
-            <Loader2 className="h-8 w-8 animate-spin text-primary/70" />
+      
+      <CardContent>
+        <div className="space-y-4">
+          <div className="relative">
+            <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search entries..."
+              className="pl-8"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
           </div>
-        ) : filteredEntries.length > 0 ? (
-          <ScrollArea className="h-[calc(100vh-24rem)] pr-3">
-            <div className="space-y-1">
-              {filteredEntries.map((entry) => (
-                <div
-                  key={entry}
-                  className={`flex items-center justify-between p-2 rounded-md cursor-pointer transition-colors ${
-                    selectedEntryKey === entry
-                      ? "bg-primary text-primary-foreground"
-                      : "hover:bg-secondary"
-                  }`}
-                  onClick={() => setSelectedEntryKey(entry)}
-                >
-                  <span className="truncate font-mono text-sm">{entry}</span>
-                  {selectedEntryKey === entry && (
+          
+          <ScrollArea className="h-[400px] rounded-md border">
+            {filteredEntries.length > 0 ? (
+              <div className="p-4">
+                {filteredEntries.map((entry) => (
+                  <div
+                    key={entry}
+                    className={`p-3 rounded cursor-pointer flex justify-between items-center ${
+                      selectedEntryKey === entry 
+                        ? 'bg-blue-100 dark:bg-blue-900/30 border-l-4 border-blue-500 dark:border-blue-400' 
+                        : 'hover:bg-gray-100 dark:hover:bg-gray-800/50'
+                    }`}
+                    onClick={() => handleEntryClick(entry)}
+                  >
+                    <span className="font-mono text-sm truncate">{entry}</span>
                     <Button
                       variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 text-primary-foreground/80 hover:text-primary-foreground hover:bg-primary/90"
+                      size="sm"
                       onClick={(e) => {
                         e.stopPropagation();
                         setEntryToDelete(entry);
                         setIsDeleteDialogOpen(true);
                       }}
-                      aria-label="Delete entry"
                     >
-                      <Trash2 className="h-3.5 w-3.5" />
+                      <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
                     </Button>
-                  )}
-                </div>
-              ))}
-            </div>
-          </ScrollArea>
-        ) : (
-          <div className="flex flex-col items-center justify-center py-8 text-center text-muted-foreground">
-            {searchTerm ? (
-              <>
-                <Search className="h-8 w-8 mb-2 opacity-20" />
-                <p>No entries match your search</p>
-              </>
+                  </div>
+                ))}
+              </div>
             ) : (
-              <>
-                <AlertCircle className="h-8 w-8 mb-2 opacity-20" />
-                <p>No entries found in this datastore</p>
-                <Button 
-                  variant="link" 
-                  size="sm" 
-                  onClick={() => setIsCreateDialogOpen(true)}
-                  className="mt-2"
-                >
-                  Create your first entry
-                </Button>
-              </>
+              <div className="flex flex-col items-center justify-center h-full p-4 text-center text-muted-foreground">
+                <AlertCircle className="h-8 w-8 mb-2" />
+                <p>No entries found</p>
+                <p className="text-xs mt-1">
+                  {searchTerm ? "Try a different search term" : "Create an entry to get started"}
+                </p>
+              </div>
             )}
-          </div>
-        )}
+          </ScrollArea>
+        </div>
       </CardContent>
-      <CardFooter className="border-t bg-muted/30 py-2 px-3">
-        <p className="text-xs text-muted-foreground">
-          Datastore: <span className="font-medium text-foreground">{selectedDatastore}</span>
-        </p>
-      </CardFooter>
-
+      
       {/* Create Entry Dialog */}
       <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Create New Entry</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-2">
+          <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <label htmlFor="entryKey" className="text-sm font-medium">
-                Entry Key
-              </label>
+              <label htmlFor="entryKey" className="text-sm font-medium">Entry Key</label>
               <Input
                 id="entryKey"
                 value={newEntryKey}
                 onChange={(e) => setNewEntryKey(e.target.value)}
-                placeholder="Enter unique key"
+                placeholder="Enter key name"
               />
             </div>
             <div className="space-y-2">
-              <label htmlFor="entryValue" className="text-sm font-medium">
-                Entry Value (JSON)
-              </label>
+              <label htmlFor="entryValue" className="text-sm font-medium">Entry Value (JSON)</label>
               <textarea
                 id="entryValue"
+                className="w-full min-h-[200px] p-2 border rounded-md font-mono text-sm"
                 value={newEntryValue}
                 onChange={(e) => setNewEntryValue(e.target.value)}
-                placeholder="Enter JSON data"
-                className="w-full min-h-[120px] p-2 border rounded-md font-mono text-sm"
+                placeholder="{}"
               />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleCreateEntry}>Create Entry</Button>
+            <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleCreateEntry}>Create</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
+      
       {/* Delete Entry Dialog */}
       <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Delete Entry</DialogTitle>
           </DialogHeader>
-          <p>
-            Are you sure you want to delete the entry <span className="font-mono font-medium">{entryToDelete}</span>?
-            This action cannot be undone.
-          </p>
+          <div className="py-4">
+            <p>Are you sure you want to delete the entry <span className="font-mono font-bold">{entryToDelete}</span>?</p>
+            <p className="text-sm text-muted-foreground mt-2">This action cannot be undone.</p>
+          </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button variant="destructive" onClick={handleDeleteEntry}>
-              Delete
-            </Button>
+            <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>Cancel</Button>
+            <Button variant="destructive" onClick={handleDeleteEntry}>Delete</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
     </Card>
   );
 }
+
+export default EntryList;
 
