@@ -1,250 +1,279 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, JSX } from "react";
+import { useDatastore } from "@/contexts/DatastoreContext";
+import { useToast } from "@/components/ui/toast";
+import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { useToast } from "@/components/ui/use-toast";
-import dynamic from "next/dynamic";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Loader2, RefreshCw, Save, Clock, AlertTriangle } from "lucide-react";
+import { format } from "date-fns";
+import { Badge } from "@/components/ui/badge";
+import { Key } from "lucide-react";
 
-// Import Monaco Editor with loading state
-const MonacoEditor = dynamic(
-  () => {
-    console.log("Loading Monaco Editor...");
-    return import("@monaco-editor/react").then((mod) => {
-      console.log("Monaco Editor loaded successfully");
-      return mod.default;
-    });
-  },
-  {
-    ssr: false,
-    loading: () => {
-      console.log("Showing loading state...");
-      return (
-        <div className="h-[400px] w-full flex items-center justify-center bg-slate-100 rounded-md">
-          <p>Loading Editor...</p>
-        </div>
-      );
-    },
-  }
-);
+// Define a type for JSON data
+type JsonValue = 
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: JsonValue }
+  | JsonValue[];
 
-interface VersionInfo {
-  version: string;
-  createdTime: string;
-  deleted: boolean;
-}
-
-interface EntryDetailEditorProps {
-  universeId: string;
-  apiToken: string;
-  datastoreName: string;
-  entryKey: string;
-}
-
-export default function EntryDetailEditor({
-  universeId,
-  apiToken,
-  datastoreName,
-  entryKey,
-}: EntryDetailEditorProps) {
-  const [entryData, setEntryData] = useState<string>("");
+export default function EntryDetailEditor() {
+  const { 
+    selectedDatastore, 
+    selectedEntryKey, 
+    fetchEntry, 
+    saveEntry,
+    isLoading 
+  } = useDatastore();
+  
   const { toast } = useToast();
+  const [entryData, setEntryData] = useState("");
+  const [formattedData, setFormattedData] = useState<JsonValue | null>(null);
+  const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const [hasChanges, setHasChanges] = useState(false);
+  const [jsonError, setJsonError] = useState<string | null>(null);
+  const [isLoadingEntry, setIsLoadingEntry] = useState(false);
 
-  // Versioning
-  const [versions, setVersions] = useState<VersionInfo[]>([]);
-  const [showVersions, setShowVersions] = useState(false);
+  // Memoize loadEntryData to avoid dependency issues
+  const loadEntryData = useCallback(async () => {
+    if (!selectedDatastore || !selectedEntryKey) return;
+    
+    setIsLoadingEntry(true);
+    try {
+      const data = await fetchEntry(selectedDatastore, selectedEntryKey);
+      if (data) {
+        try {
+          const formattedJson = JSON.stringify(data, null, 2);
+          setEntryData(formattedJson);
+          setFormattedData(data as JsonValue);
+          setLastSaved(new Date());
+          setHasChanges(false);
+          setJsonError(null);
+        } catch (err) {
+          setEntryData(JSON.stringify(data));
+          setFormattedData(data as JsonValue);
+        }
+      }
+    } catch (error) {
+      console.error("Error loading entry data:", error);
+      setEntryData("");
+      setFormattedData(null);
+    } finally {
+      setIsLoadingEntry(false);
+    }
+  }, [selectedDatastore, selectedEntryKey, fetchEntry]);
 
-  console.log("EntryDetailEditor render:", {
-    entryKey,
-    datastoreName,
-    hasData: !!entryData,
-  });
+  // Reset state when datastore or entry key changes
+  useEffect(() => {
+    // Clear data when datastore or entry key changes
+    setEntryData("");
+    setFormattedData(null);
+    setLastSaved(null);
+    setHasChanges(false);
+    setJsonError(null);
+    
+    // Only load data if both datastore and entry key are selected
+    if (selectedDatastore && selectedEntryKey) {
+      loadEntryData();
+    }
+  }, [selectedDatastore, selectedEntryKey, loadEntryData]); // Fixed dependency array
 
-  const fetchEntryDetail = useCallback(async () => {
-    console.log("Fetching entry detail for:", entryKey);
-    const url = `/api/datastores/${encodeURIComponent(
-      datastoreName
-    )}/entry?universeId=${universeId}&apiToken=${apiToken}&entryKey=${entryKey}`;
+  const handleDataChange = (value: string) => {
+    setEntryData(value);
+    setHasChanges(true);
     
     try {
-      const res = await fetch(url);
-      const data = await res.json();
-      console.log("Fetched entry data:", data);
-      
-      if (data.error) {
-        console.error("Entry fetch error:", data.error);
-        toast("Error", "Failed to fetch entry: " + data.error, {
-          variant: "destructive",
-        });
-        return;
-      }
-      
-      const formattedData = JSON.stringify(data, null, 2);
-      console.log("Setting formatted data:", formattedData.slice(0, 100) + "...");
-      setEntryData(formattedData);
-    } catch (error) {
-      console.error("Fetch error:", error);
-      toast("Error", "Failed to fetch entry", {
-        variant: "destructive",
-      });
-    }
-  }, [universeId, apiToken, datastoreName, entryKey, toast]);
-
-  useEffect(() => {
-    console.log("useEffect triggered with entryKey:", entryKey);
-    if (entryKey) {
-      fetchEntryDetail();
-    }
-  }, [entryKey, fetchEntryDetail]);
-
-  /** Save the current editor contents back to the Roblox datastore. */
-  async function handleSave() {
-    try {
-      const parsedValue = JSON.parse(entryData);
-      const body = {
-        entryKey,
-        value: parsedValue,
-      };
-      const res = await fetch(
-        `/api/datastores/${encodeURIComponent(
-          datastoreName
-        )}/entry?universeId=${universeId}&apiToken=${apiToken}`,
-        {
-          method: "POST",
-          body: JSON.stringify(body),
-        }
-      );
-      const result = await res.json();
-      if (result.error) {
-        toast("Error", "Failed to save: " + result.error, {
-          variant: "destructive",
-        });
-      } else {
-        toast("Success", "Entry saved successfully!", {});
-      }
+      const parsed = JSON.parse(value);
+      setFormattedData(parsed as JsonValue);
+      setJsonError(null);
     } catch (err) {
-      toast("Error", "JSON parse error: " + err, {
-        variant: "destructive",
-      });
-    }
-  }
-
-  useEffect(() => {
-    console.log("EntryDetailEditor MOUNTED with entryKey =", entryKey);
-  }, [entryKey]);
-
-  /** Toggle showing/hiding the version history panel. If showing, fetch versions. */
-  async function handleToggleVersions() {
-    console.log("handleToggleVersions called");
-    setShowVersions(!showVersions);
-    if (!showVersions) {
-      // user is opening the panel, so fetch version list
-      const url = `/api/datastores/${encodeURIComponent(
-        datastoreName
-      )}/entry/versions?universeId=${universeId}&apiToken=${apiToken}&entryKey=${entryKey}`;
-      const res = await fetch(url);
-      const data = await res.json();
-      if (data.error) {
-        toast("Error", "Failed to fetch versions: " + data.error, {
-          variant: "destructive",
-        });
-        return;
-      }
-      if (data.versions) {
-        setVersions(data.versions);
+      if (err instanceof Error) {
+        setJsonError(err.message);
       } else {
-        setVersions([]);
+        setJsonError("Invalid JSON");
       }
     }
-  }
+  };
 
-  /** Load a specific version's data and replace the editor contents. */
-  async function handleLoadVersion(versionId: string) {
-    const url = `/api/datastores/${encodeURIComponent(
-      datastoreName
-    )}/entry/versions/version?universeId=${universeId}&apiToken=${apiToken}&entryKey=${entryKey}&versionId=${versionId}`;
-    const res = await fetch(url);
-    const data = await res.json();
-    if (data.error) {
-      toast("Error", "Failed to load version: " + data.error, {
-        variant: "destructive",
-      });
-      return;
+  const handleSave = async () => {
+    if (!selectedDatastore || !selectedEntryKey || jsonError) return;
+    
+    try {
+      const parsedData = JSON.parse(entryData);
+      await saveEntry(selectedDatastore, selectedEntryKey, parsedData);
+      setLastSaved(new Date());
+      setHasChanges(false);
+      toast("Entry saved successfully", "success");
+    } catch (err) {
+      toast("Failed to save entry", "error");
     }
-    setEntryData(JSON.stringify(data, null, 2));
-    toast("Version Loaded", "You can now save to overwrite the current data with this version.", {});
+  };
+
+  const renderFormattedView = () => {
+    if (!formattedData) {
+      return <div className="text-muted-foreground">No data to display</div>;
+    }
+    
+    return renderObjectTree(formattedData, 0);
+  };
+
+  // Fix the any type in renderObjectTree
+  const renderObjectTree = (obj: JsonValue, depth: number): JSX.Element => {
+    if (obj === null) {
+      return <span className="text-gray-500">null</span>;
+    }
+    
+    if (Array.isArray(obj)) {
+      return (
+        <div className={depth > 0 ? "pl-4 border-l border-border" : ""}>
+          {obj.length === 0 ? (
+            <span className="text-gray-500">[]</span>
+          ) : (
+            obj.map((item, index) => (
+              <div key={index} className="py-1">
+                <span className="text-gray-500 mr-2">[{index}]</span>
+                {typeof item === 'object' && item !== null ? (
+                  renderObjectTree(item, depth + 1)
+                ) : (
+                  <span className={`${typeof item === 'string' ? 'text-green-600' : typeof item === 'number' ? 'text-blue-600' : 'text-purple-600'}`}>
+                    {JSON.stringify(item)}
+                  </span>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+      );
+    }
+    
+    if (typeof obj === 'object') {
+      return (
+        <div className={depth > 0 ? "pl-4 border-l border-border" : ""}>
+          {Object.entries(obj).map(([key, value]) => (
+            <div key={key} className="py-1">
+              <span className="font-medium mr-2">{key}:</span>
+              {typeof value === 'object' && value !== null ? (
+                renderObjectTree(value, depth + 1)
+              ) : (
+                <span className={`${typeof value === 'string' ? 'text-green-600' : typeof value === 'number' ? 'text-blue-600' : 'text-purple-600'}`}>
+                  {JSON.stringify(value)}
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      );
+    }
+    
+    return <span>{String(obj)}</span>;
+  };
+
+  // If no datastore or entry is selected, show placeholder
+  if (!selectedDatastore || !selectedEntryKey) {
+    return (
+      <Card className="shadow-sm h-full">
+        <CardHeader>
+          <CardTitle>Entry Details</CardTitle>
+        </CardHeader>
+        <CardContent className="flex items-center justify-center h-64 text-muted-foreground">
+          <div className="text-center">
+            <Key className="h-12 w-12 mx-auto mb-4 opacity-20" />
+            <p>Select an entry to view and edit its data</p>
+          </div>
+        </CardContent>
+      </Card>
+    );
   }
 
   return (
-    <Card className="shadow-lg hover:shadow-xl transition-shadow duration-300">
-      <CardHeader className="bg-gradient-to-r from-indigo-500 to-purple-500">
-        <CardTitle className="text-white">Editing: {entryKey}</CardTitle>
-      </CardHeader>
-      <CardContent className="p-4">
-        <div className="flex flex-wrap items-center gap-2 mb-4">
+    <Card className="shadow-sm h-full">
+      <CardHeader className="pb-3 flex flex-row items-center justify-between">
+        <div>
+          <CardTitle className="text-lg flex items-center">
+            Entry Details
+            {hasChanges && (
+              <Badge variant="outline" className="ml-2 text-amber-500 border-amber-200 bg-amber-50">
+                Unsaved changes
+              </Badge>
+            )}
+          </CardTitle>
+          <p className="text-sm text-muted-foreground mt-1 font-mono">
+            {selectedEntryKey}
+          </p>
+        </div>
+        <div className="flex space-x-2">
           <Button
-            onClick={handleSave}
-            className="bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white transition-all duration-300"
+            variant="outline"
+            size="sm"
+            className="flex items-center gap-1"
+            onClick={loadEntryData}
+            disabled={isLoading}
           >
-            Save Changes
+            <RefreshCw size={16} /> Refresh
           </Button>
-          <Button variant="outline" onClick={handleToggleVersions} className="bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white transition-all duration-300"
+          <Button
+            variant={jsonError ? "outline" : "default"}
+            size="sm"
+            className="flex items-center gap-1"
+            onClick={handleSave}
+            disabled={isLoading || !!jsonError || !hasChanges}
           >
-            {showVersions ? "Hide Versions" : "Show Versions"}
+            {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save size={16} />} Save
           </Button>
         </div>
-
-        {showVersions && (
-          <div className="p-2 mb-4 border rounded-md bg-slate-50">
-            <h3 className="font-bold mb-2">Versions</h3>
-            {versions.length === 0 && <p className="text-sm text-slate-600">No versions found.</p>}
-            {versions.map((v) => (
-              <div
-                key={v.version}
-                className="flex items-center justify-between p-2 border-b last:border-none"
-              >
-                <div>
-                  <p className="font-mono text-sm">Version: {v.version}</p>
-                  <p className="text-xs text-slate-500">
-                    Created: {v.createdTime} {v.deleted && "(deleted)"}
-                  </p>
-                </div>
-                <Button variant="outline" onClick={() => handleLoadVersion(v.version)}>
-                  Load
-                </Button>
-              </div>
-            ))}
+      </CardHeader>
+      
+      <CardContent>
+        {jsonError && (
+          <div className="mb-3 p-2 bg-red-50 border border-red-200 rounded-md flex items-center text-sm text-red-600">
+            <AlertTriangle className="h-4 w-4 mr-2 flex-shrink-0" />
+            <span className="truncate">{jsonError}</span>
           </div>
         )}
+        
+        <Tabs defaultValue="json" className="w-full">
+          <TabsList className="w-full justify-start mb-4">
+            <TabsTrigger value="json">JSON Editor</TabsTrigger>
+            <TabsTrigger value="formatted">Formatted View</TabsTrigger>
+          </TabsList>
 
-        <div className="min-h-[400px] w-full border rounded-md overflow-hidden">
-          {entryData ? (
-            <MonacoEditor
-              height="400px"
-              language="json"
-              theme="vs-dark"
+          <TabsContent value="json">
+            <textarea
+              className={`w-full min-h-[400px] p-4 border rounded-md font-mono text-sm ${
+                jsonError ? "border-red-300 focus:border-red-500 focus:ring-red-500" : ""
+              }`}
               value={entryData}
-              onChange={(value) => {
-                console.log("Editor value changed:", value?.slice(0, 100) + "...");
-                setEntryData(value || "");
-              }}
-              onMount={(editor, monaco) => {
-                console.log("Monaco Editor mounted");
-              }}
-              options={{
-                minimap: { enabled: false },
-                scrollBeyondLastLine: false,
-                fontSize: 14,
-                automaticLayout: true,
-              }}
+              onChange={(e) => handleDataChange(e.target.value)}
+              placeholder="JSON data will appear here"
+              spellCheck="false"
             />
-          ) : (
-            <div className="h-[400px] w-full flex items-center justify-center bg-slate-100 rounded-md">
-              <p>Loading data...</p>
+          </TabsContent>
+
+          <TabsContent value="formatted">
+            <div className="min-h-[400px] p-4 border rounded-md overflow-auto">
+              {isLoading ? (
+                <div className="flex justify-center items-center h-full">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary/70" />
+                </div>
+              ) : (
+                renderFormattedView()
+              )}
             </div>
-          )}
-        </div>
+          </TabsContent>
+        </Tabs>
       </CardContent>
+      
+      <CardFooter className="text-xs text-muted-foreground flex flex-col items-start gap-1">
+        <div>Datastore: <span className="font-medium text-foreground">{selectedDatastore}</span></div>
+        {lastSaved && (
+          <div className="flex items-center">
+            <Clock className="h-3 w-3 mr-1" /> Last refreshed: {format(lastSaved, "MMM d, yyyy HH:mm:ss")}
+          </div>
+        )}
+      </CardFooter>
     </Card>
   );
 }

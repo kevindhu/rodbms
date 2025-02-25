@@ -4,10 +4,12 @@ import * as React from "react"
 import * as ToastPrimitives from "@radix-ui/react-toast"
 import { cva, type VariantProps } from "class-variance-authority"
 import { X } from 'lucide-react'
+import { useState, createContext, useContext, useEffect, ReactNode } from "react"
 
 import { cn } from "@/lib/utils"
 
-const ToastProvider = ToastPrimitives.Provider
+// Rename this to avoid conflict with your custom provider
+const RadixToastProvider = ToastPrimitives.Provider
 
 const ToastViewport = React.forwardRef<
   React.ElementRef<typeof ToastPrimitives.Viewport>,
@@ -116,10 +118,98 @@ type ToastProps = React.ComponentPropsWithoutRef<typeof Toast>
 
 type ToastActionElement = React.ReactElement<typeof ToastAction>
 
+export type ToastType = "success" | "error" | "info" | "warning"
+
+export interface ToastMessage {
+  id: string
+  message: string
+  type: ToastType
+}
+
+interface ToastContextType {
+  toast: (message: string, type: ToastType) => void
+  toasts: ToastMessage[]
+  removeToast: (id: string) => void
+}
+
+const ToastContext = createContext<ToastContextType | undefined>(undefined)
+
+export function useToast() {
+  const context = useContext(ToastContext)
+  if (!context) {
+    throw new Error("useToast must be used within a ToastProvider")
+  }
+  return context
+}
+
+// Rename your custom Toast component
+export function ToastMessage({
+  message,
+  type,
+  onClose,
+}: {
+  message: string
+  type: ToastType
+  onClose: () => void
+}) {
+  useEffect(() => {
+    const timer = setTimeout(onClose, 3000)
+    return () => clearTimeout(timer)
+  }, [onClose])
+
+  const bgColor =
+    type === "success"
+      ? "bg-green-500"
+      : type === "error"
+      ? "bg-red-500"
+      : type === "warning"
+      ? "bg-amber-500"
+      : "bg-blue-500"
+
+  return (
+    <div className={`${bgColor} text-white p-3 rounded-md shadow-md mb-2 flex justify-between items-center`}>
+      <span>{message}</span>
+      <button onClick={onClose} className="ml-2 text-white hover:text-gray-200">
+        ×
+      </button>
+    </div>
+  )
+}
+
+// Rename your custom provider
+export function CustomToastProvider({ children }: { children: ReactNode }) {
+  const [toasts, setToasts] = useState<ToastMessage[]>([])
+
+  const toast = (message: string, type: ToastType) => {
+    const id = Math.random().toString(36).substring(2, 9)
+    setToasts((prev) => [...prev, { id, message, type }])
+  }
+
+  const removeToast = (id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id))
+  }
+
+  return (
+    <ToastContext.Provider value={{ toast, toasts, removeToast }}>
+      {children}
+      <div className="fixed bottom-4 right-4 space-y-2 z-50">
+        {toasts.map((t) => (
+          <ToastMessage
+            key={t.id}
+            message={t.message}
+            type={t.type}
+            onClose={() => removeToast(t.id)}
+          />
+        ))}
+      </div>
+    </ToastContext.Provider>
+  )
+}
+
 export {
   type ToastProps,
   type ToastActionElement,
-  ToastProvider,
+  RadixToastProvider as ToastProvider,
   ToastViewport,
   Toast,
   ToastTitle,
