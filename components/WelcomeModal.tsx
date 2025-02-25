@@ -67,7 +67,7 @@ export function WelcomeModal() {
               </p>
               <div className="mt-2">
                 <a 
-                  href="https://github.com/yourusername/datastore-explorer" 
+                  href="https://github.com/verticalfx/rodbms" 
                   target="_blank" 
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
@@ -83,7 +83,7 @@ export function WelcomeModal() {
           <Button 
             variant="outline" 
             className="flex items-center gap-1"
-            onClick={() => window.open("https://github.com/yourusername/datastore-explorer", "_blank")}
+            onClick={() => window.open("https://github.com/verticalfx/rodbms", "_blank")}
           >
             <Star size={16} /> Star on GitHub
           </Button>
