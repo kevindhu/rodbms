@@ -8,8 +8,8 @@ interface DatastoreContextType {
   setUniverseId: (id: string) => void;
   apiToken: string;
   setApiToken: (token: string) => void;
-  datastores: string[];
-  setDatastores: (datastores: string[]) => void;
+  datastores: { name: string; createdTime: string }[];
+  setDatastores: (datastores: { name: string; createdTime: string }[]) => void;
   selectedDatastore: string;
   setSelectedDatastore: (datastore: string) => void;
   selectedEntryKey: string;
@@ -17,7 +17,7 @@ interface DatastoreContextType {
   entryData: string;
   setEntryData: (data: string) => void;
   fetchDatastores: () => Promise<void>;
-  fetchEntries: (datastoreName: string) => Promise<string[]>;
+  fetchEntries: (datastoreName: string, searchQuery?: string) => Promise<string[]>;
   fetchEntry: (datastoreName: string, key: string) => Promise<any>;
   saveEntry: (datastoreName: string, key: string, data: any) => Promise<void>;
   deleteEntry: (datastoreName: string, key: string) => Promise<void>;
@@ -50,7 +50,7 @@ export function DatastoreProvider({ children }: { children: ReactNode }) {
   const { toast } = useToast();
   const [universeId, setUniverseId] = useState("");
   const [apiToken, setApiToken] = useState("");
-  const [datastores, setDatastores] = useState<string[]>([]);
+  const [datastores, setDatastores] = useState<{ name: string; createdTime: string }[]>([]);
   const [selectedDatastore, setSelectedDatastore] = useState("");
   const [selectedEntryKey, setSelectedEntryKey] = useState("");
   const [entryData, setEntryData] = useState("");
@@ -76,9 +76,9 @@ export function DatastoreProvider({ children }: { children: ReactNode }) {
     return res.json();
   }
 
-  // Convert fetchEntries to useCallback to prevent recreating on each render
-  const fetchEntries = useCallback(async (datastoreName: string): Promise<string[]> => {
-    console.log(`${DEBUG_PREFIX} fetchEntries called with datastoreName: ${datastoreName}`);
+  // Update the fetchEntries function to support searching
+  const fetchEntries = useCallback(async (datastoreName: string, searchQuery?: string): Promise<string[]> => {
+    console.log(`${DEBUG_PREFIX} fetchEntries called with datastoreName: ${datastoreName}, search: ${searchQuery || 'none'}`);
     console.log(`${DEBUG_PREFIX} Current liveMode: ${liveMode.current}`);
     
     // Don't set loading state if this is an automated/background refresh
@@ -88,13 +88,27 @@ export function DatastoreProvider({ children }: { children: ReactNode }) {
     }
     
     try {
-      const url = `/api/datastores/${encodeURIComponent(datastoreName)}/entries?universeId=${universeId}&apiToken=${apiToken}`;
+      // Build the URL with search parameter if provided
+      let baseUrl = `/api/datastores/${encodeURIComponent(datastoreName)}/entries?universeId=${universeId}`;
+      if (searchQuery) {
+        baseUrl += `&search=${encodeURIComponent(searchQuery)}`;
+      }
       
       // Add a cache-busting parameter for live mode to prevent browser caching
-      const finalUrl = liveMode.current ? `${url}&_t=${Date.now()}` : url;
+      const finalUrl = liveMode.current ? `${baseUrl}&_t=${Date.now()}` : baseUrl;
       
       console.log("Fetching entries from URL:", finalUrl);
-      const data = await fetchJSON(finalUrl);
+      
+      // Use fetch with headers instead of fetchJSON
+      const response = await fetch(finalUrl, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": apiToken // Pass API token in header
+        }
+      });
+      
+      const data = await response.json();
       console.log("Received data from entries API:", data);
       
       if (data.error) {
@@ -221,109 +235,81 @@ export function DatastoreProvider({ children }: { children: ReactNode }) {
     }
   }, [selectedDatastore]);
 
-  // Fetch all datastores
-  const fetchDatastores = async () => {
-    console.log("fetchDatastores called");
-    if (!universeId || !apiToken) {
-      toast("Please enter Universe ID and API Token", "error");
-      return;
-    }
-
-    setIsLoading(true);
-    try {
-      const data = await fetchJSON(
-        `/api/datastores?universeId=${universeId}&apiToken=${apiToken}`
-      );
-
-      if (data.error) {
-        toast("Invalid credentials or Universe ID", "error");
-        return;
-      }
-
-      // Save credentials to local storage
-      localStorage.setItem("universeId", universeId);
-      localStorage.setItem("apiToken", apiToken);
-
-      const sanitizedDatastores = data.datastores.map((ds: any) => ds.name);
+  // Add a debounce mechanism for fetchEntry
+  const fetchEntryWithDebounce = useCallback(
+    debounce(async (datastoreName: string, key: string) => {
+      console.log(`Debounced fetchEntry called with datastoreName: ${datastoreName}, key: ${key}`);
       
-      setDatastores(sanitizedDatastores || []);
-      setSelectedDatastore("");
-      setSelectedEntryKey("");
-      toast("Successfully connected!", "success");
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown error";
-      toast("Failed to connect: " + message, "error");
-    } finally {
-      setIsLoading(false);
-    }
-  };
+      if (fetchingRef.current) {
+        console.log("🛑 SKIPPING fetchEntry while loading");
+        return null;
+      }
+      
+      fetchingRef.current = true;
+      setIsLoading(true);
+      
+      try {
+        const url = `/api/datastores/${encodeURIComponent(datastoreName)}/entry?universeId=${universeId}&entryKey=${encodeURIComponent(key)}`;
+        
+        console.log(`Fetching entry from URL: ${url}`);
+        
+        const response = await fetch(url, {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            "x-api-key": apiToken
+          }
+        });
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+        
+        const result = await response.json();
+        console.log("📥 Received entry data:", result);
+        
+        try {
+          // Try to parse the data if it's JSON
+          if (typeof result === "string") {
+            try {
+              const parsed = JSON.parse(result);
+              setEntryData(JSON.stringify(parsed, null, 2));
+            } catch {
+              setEntryData(result);
+            }
+          } else {
+            setEntryData(JSON.stringify(result, null, 2));
+          }
+        } catch (e) {
+          console.log("⚠️ Error formatting data, using as string:", e);
+          setEntryData(String(result));
+        }
+        
+        return result;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Unknown error";
+        console.error("❌ Error fetching entry:", message);
+        
+        toast("Failed to fetch entry: " + message, "error");
+        return null;
+      } finally {
+        console.log("⏳ Setting isLoading to FALSE");
+        setIsLoading(false);
+        fetchingRef.current = false;
+      }
+    }, 300),
+    [universeId, apiToken, toast]
+  );
 
-  // Convert fetchEntry to useCallback to properly handle React hooks
+  // Replace the fetchEntry function with this
   const fetchEntry = useCallback(async (datastoreName: string, key: string) => {
     console.log(`fetchEntry called with datastoreName: ${datastoreName}, key: ${key}`);
     
-    if (fetchingRef.current) {
-      console.log("🛑 SKIPPING fetchEntry while loading");
-      return null;
-    }
-    
-    if (isLoading) {
-      console.log("🛑 SKIPPING fetchEntry while loading");
-      return null;
-    }
-    
-    fetchingRef.current = true;
-    setIsLoading(true);
-    
-    try {
-      const url = `/api/datastores/${encodeURIComponent(
-        datastoreName
-      )}/entry?universeId=${universeId}&apiToken=${apiToken}&entryKey=${encodeURIComponent(
-        key
-      )}`;
-      
-      console.log(`Fetching entry from URL: ${url}`);
-      
-      const response = await fetch(url);
-      if (!response.ok) {
-        throw new Error(`HTTP error! Status: ${response.status}`);
-      }
-      
-      const result = await response.json();
-      console.log("📥 Received entry data:", result);
-      
-      try {
-        // Try to parse the data if it's JSON
-        if (typeof result === "string") {
-          try {
-            const parsed = JSON.parse(result);
-            setEntryData(JSON.stringify(parsed, null, 2));
-          } catch {
-            setEntryData(result);
-          }
-        } else {
-          setEntryData(JSON.stringify(result, null, 2));
-        }
-      } catch (e) {
-        console.log("⚠️ Error formatting data, using as string:", e);
-        setEntryData(String(result));
-      }
-      
-      return result;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown error";
-      console.error("❌ Error fetching entry:", message);
-      
-      toast("Failed to fetch entry: " + message, "error");
-      return null;
-    } finally {
-      console.log("⏳ Setting isLoading to FALSE");
-      setIsLoading(false);
-      fetchingRef.current = false;
-    }
-  }, [universeId, apiToken, isLoading, toast]);
+    // Use the debounced version to prevent rapid successive calls
+    return fetchEntryWithDebounce(datastoreName, key);
+  }, [fetchEntryWithDebounce]);
 
-  // Save an entry
+  // Update saveEntry to use headers
   const saveEntry = async (datastoreName: string, key: string, value: any) => {
     console.log("saveEntry called with datastoreName:", datastoreName, "key:", key);
     setIsLoading(true);
@@ -333,15 +319,18 @@ export function DatastoreProvider({ children }: { children: ReactNode }) {
         value: value,
       };
       
-      const res = await fetchJSON(
-        `/api/datastores/${encodeURIComponent(
-          datastoreName
-        )}/entry?universeId=${universeId}&apiToken=${apiToken}`,
-        {
-          method: "POST",
-          body: JSON.stringify(body),
-        }
-      );
+      const url = `/api/datastores/${encodeURIComponent(datastoreName)}/entry?universeId=${universeId}`;
+      
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": apiToken // Pass API token in header
+        },
+        body: JSON.stringify(body)
+      });
+      
+      const res = await response.json();
       
       if (res.error) {
         toast("Failed to save: " + res.error, "error");
@@ -356,21 +345,22 @@ export function DatastoreProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // Delete an entry
+  // Update deleteEntry to use headers
   const deleteEntry = async (datastoreName: string, key: string) => {
     console.log("deleteEntry called with datastoreName:", datastoreName, "key:", key);
     setIsLoading(true);
     try {
-      const res = await fetchJSON(
-        `/api/datastores/${encodeURIComponent(
-          datastoreName
-        )}/entry?universeId=${universeId}&apiToken=${apiToken}&entryKey=${encodeURIComponent(
-          key
-        )}`,
-        {
-          method: "DELETE",
+      const url = `/api/datastores/${encodeURIComponent(datastoreName)}/entry?universeId=${universeId}&entryKey=${encodeURIComponent(key)}`;
+      
+      const response = await fetch(url, {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": apiToken // Pass API token in header
         }
-      );
+      });
+      
+      const res = await response.json();
       
       if (res.error) {
         toast("Failed to delete: " + res.error, "error");
@@ -380,6 +370,43 @@ export function DatastoreProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error";
       toast("Error deleting entry: " + message, "error");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Update fetchDatastores to use headers
+  const fetchDatastores = async () => {
+    if (!universeId || !apiToken) {
+      toast("Please enter Universe ID and API Token", "error");
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const response = await fetch(`/api/datastores`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiToken // Pass API token in header
+        },
+        body: JSON.stringify({
+          universeId
+          // No need to include apiToken in body since it's in the header
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (data.error) {
+        toast(data.error, "error");
+        return;
+      }
+      
+      setDatastores(data.datastores || []);
+      toast("Successfully connected!", "success");
+    } catch (error) {
+      toast("Failed to connect", "error");
     } finally {
       setIsLoading(false);
     }
@@ -405,7 +432,7 @@ export function DatastoreProvider({ children }: { children: ReactNode }) {
       } else {
         toast("Datastore created successfully!", "success");
         // Add the new datastore to the list
-        setDatastores([...datastores, datastoreName]);
+        setDatastores([...datastores, { name: datastoreName, createdTime: new Date().toISOString() }]);
         return true;
       }
     } catch (err) {
@@ -459,4 +486,24 @@ export function DatastoreProvider({ children }: { children: ReactNode }) {
       {children}
     </DatastoreContext.Provider>
   );
+}
+
+// Add this debounce utility function at the top of your file
+function debounce<T extends (...args: any[]) => any>(
+  func: T,
+  wait: number
+): (...args: Parameters<T>) => Promise<ReturnType<T>> {
+  let timeout: NodeJS.Timeout | null = null;
+  
+  return function(...args: Parameters<T>): Promise<ReturnType<T>> {
+    return new Promise((resolve) => {
+      if (timeout) {
+        clearTimeout(timeout);
+      }
+      
+      timeout = setTimeout(() => {
+        resolve(func(...args));
+      }, wait);
+    });
+  };
 } 

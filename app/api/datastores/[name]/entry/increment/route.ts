@@ -16,7 +16,9 @@ export async function POST(
     const { name: datastoreName } = await params;
     const { searchParams } = new URL(req.url);
     const universeId = searchParams.get('universeId');
-    const apiToken = searchParams.get('apiToken');
+    
+    // Get API token from header first, fall back to query param
+    const apiToken = req.headers.get("x-api-key") || searchParams.get('apiToken');
 
     if (!universeId || !apiToken) {
         return NextResponse.json<ErrorResponse>(

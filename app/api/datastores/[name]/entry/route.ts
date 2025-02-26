@@ -15,7 +15,9 @@ export async function GET(
     const { name: datastoreName } = await params;
     const { searchParams } = new URL(req.url);
     const universeId = searchParams.get("universeId");
-    const apiToken = searchParams.get("apiToken");
+    
+    // Get API token from header first, fall back to query param
+    const apiToken = req.headers.get("x-api-key") || searchParams.get("apiToken");
     const entryKey = searchParams.get("entryKey") || "";
     const scope = searchParams.get("scope") || "";
 
@@ -49,27 +51,29 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ name: string }> }
 ) {
-  const { name: datastoreName } = await params;
-  const { searchParams } = new URL(req.url);
-  const universeId = searchParams.get("universeId");
-  const apiToken = searchParams.get("apiToken");
-
-  if (!universeId || !apiToken) {
-    return NextResponse.json(
-      { error: "Missing universeId or apiToken" },
-      { status: 400 }
-    );
-  }
-
-  const body = await req.json();
-  if (!body.entryKey || body.value === undefined) {
-    return NextResponse.json(
-      { error: "Missing entryKey or value" },
-      { status: 400 }
-    );
-  }
-
   try {
+    const { name: datastoreName } = await params;
+    const { searchParams } = new URL(req.url);
+    const universeId = searchParams.get("universeId");
+    
+    // Get API token from header first, fall back to query param
+    const apiToken = req.headers.get("x-api-key") || searchParams.get("apiToken");
+
+    if (!universeId || !apiToken) {
+      return NextResponse.json(
+        { error: "Missing universeId or apiToken" },
+        { status: 400 }
+      );
+    }
+
+    const body = await req.json();
+    if (!body.entryKey || body.value === undefined) {
+      return NextResponse.json(
+        { error: "Missing entryKey or value" },
+        { status: 400 }
+      );
+    }
+
     const result = await setDataStoreEntry(
       universeId,
       apiToken,
@@ -96,7 +100,9 @@ export async function DELETE(
   const { name: datastoreName } = await params;
   const { searchParams } = new URL(req.url);
   const universeId = searchParams.get("universeId");
-  const apiToken = searchParams.get("apiToken");
+  
+  // Get API token from header first, fall back to query param
+  const apiToken = req.headers.get("x-api-key") || searchParams.get("apiToken");
   const entryKey = searchParams.get("entryKey") || "";
   const scope = searchParams.get("scope") || "";
 

@@ -5,8 +5,8 @@ import { useDatastore } from "@/contexts/DatastoreContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, Search, Plus, Trash2, RefreshCw, AlertCircle } from "lucide-react";
-import { useToast } from "@/components/ui/use-toast";
+import { Loader2, Search, Plus, Trash2, RefreshCw, AlertCircle, X } from "lucide-react";
+import { useToast } from "@/components/ui/toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
@@ -24,13 +24,17 @@ export function EntryList() {
     selectedDatastore, 
     fetchEntries, 
     selectedEntryKey, 
-    setSelectedEntryKey 
+    setSelectedEntryKey,
+    saveEntry,
+    deleteEntry,
+    isLoading
   } = useDatastore();
   
   const { toast } = useToast();
   
   const [entries, setEntries] = useState<string[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
+  const [isSearching, setIsSearching] = useState(false);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [newEntryKey, setNewEntryKey] = useState("");
   const [newEntryValue, setNewEntryValue] = useState("{}");
@@ -43,6 +47,12 @@ export function EntryList() {
   // Track if component is mounted to prevent state updates after unmount
   const isMountedRef = useRef(true);
   
+  // Add a ref to track if we're currently viewing search results
+  const isViewingSearchResults = useRef(false);
+  
+  // Add this to track if we've already loaded the entry
+  const hasLoadedEntryRef = useRef(false);
+  
   // Set up mount/unmount tracking
   useEffect(() => {
     isMountedRef.current = true;
@@ -52,17 +62,23 @@ export function EntryList() {
     };
   }, []);
   
-  const loadEntries = useCallback(async () => {
-    console.log(`${DEBUG_PREFIX} loadEntries called, selectedDatastore: ${selectedDatastore}`);
+  // Modified loadEntries to track search state
+  const loadEntries = useCallback(async (search?: string) => {
+    console.log(`${DEBUG_PREFIX} loadEntries called, selectedDatastore: ${selectedDatastore}, search: ${search || 'none'}`);
     
     if (!selectedDatastore) {
       console.log(`${DEBUG_PREFIX} No datastore selected, skipping fetch`);
       return;
     }
     
+    setIsSearching(true);
+    
     try {
-      console.log(`${DEBUG_PREFIX} Calling fetchEntries`);
-      const newEntries = await fetchEntries(selectedDatastore);
+      console.log(`${DEBUG_PREFIX} Calling fetchEntries with search: ${search || 'none'}`);
+      // Track if we're viewing search results
+      isViewingSearchResults.current = !!search;
+      
+      const newEntries = await fetchEntries(selectedDatastore, search);
       console.log(`${DEBUG_PREFIX} Received entries from API:`, newEntries);
       
       if (!isMountedRef.current) {
@@ -70,14 +86,15 @@ export function EntryList() {
         return;
       }
       
-      if (JSON.stringify(newEntries) !== JSON.stringify(prevEntriesRef.current)) {
-        console.log(`${DEBUG_PREFIX} Entries changed, updating state`);
+      // Always update entries when searching
+      if (search || JSON.stringify(newEntries) !== JSON.stringify(prevEntriesRef.current)) {
+        console.log(`${DEBUG_PREFIX} Entries changed or search performed, updating state`);
         prevEntriesRef.current = newEntries;
         setEntries(newEntries);
         console.log(`${DEBUG_PREFIX} Entries state updated:`, newEntries);
         
-        // Reset selected entry if needed
-        if (newEntries.length > 0 && selectedEntryKey && !newEntries.includes(selectedEntryKey)) {
+        // Don't reset selected entry when searching - only if it no longer exists
+        if (selectedEntryKey && !newEntries.includes(selectedEntryKey)) {
           console.log(`${DEBUG_PREFIX} Selected entry no longer exists, resetting selection`);
           setSelectedEntryKey("");
         }
@@ -86,31 +103,65 @@ export function EntryList() {
       }
     } catch (error) {
       console.error(`${DEBUG_PREFIX} Error loading entries:`, error);
-      toast(`Error loading entries: ${error instanceof Error ? error.message : String(error)}`, "error", { duration: 3000 });
+      toast(`Error loading entries: ${error instanceof Error ? error.message : String(error)}`, "error");
+    } finally {
+      setIsSearching(false);
     }
   }, [selectedDatastore, fetchEntries, selectedEntryKey, setSelectedEntryKey, toast]);
   
-  // Load entries when datastore changes
+  // Modify the useEffect that loads entries when datastore changes
+  // to prevent it from clearing search results
   useEffect(() => {
     console.log(`${DEBUG_PREFIX} useEffect for loading entries triggered`);
     console.log(`${DEBUG_PREFIX} selectedDatastore: ${selectedDatastore}`);
     
-    if (selectedDatastore) {
+    // Only load entries if:
+    // 1. We have a selected datastore
+    // 2. We're not currently viewing search results
+    // 3. We haven't just loaded an entry (to prevent loops)
+    if (selectedDatastore && !isViewingSearchResults.current && !hasLoadedEntryRef.current) {
       loadEntries();
-    } else {
+    } else if (!selectedDatastore) {
       // Clear entries if no datastore is selected
       setEntries([]);
     }
   }, [selectedDatastore, loadEntries]);
   
+  // Handle search submission
+  const handleSearch = useCallback(() => {
+    if (selectedDatastore && searchTerm) {
+      console.log(`${DEBUG_PREFIX} Performing search for: ${searchTerm}`);
+      loadEntries(searchTerm);
+    }
+  }, [selectedDatastore, searchTerm, loadEntries]);
+  
+  // Handle search on Enter key
+  const handleSearchKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleSearch();
+    }
+  }, [handleSearch]);
+  
+  // Clear search - modify to be more explicit about what it's doing
+  const clearSearch = useCallback(() => {
+    console.log(`${DEBUG_PREFIX} Clearing search`);
+    setSearchTerm("");
+    isViewingSearchResults.current = false;
+    loadEntries();
+  }, [loadEntries]);
+  
   const handleCreateEntry = async () => {
+    if (!newEntryKey) {
+      toast("Entry key is required", "error");
+      return;
+    }
+    
     try {
       // Validate JSON
-      JSON.parse(newEntryValue);
+      const parsedValue = JSON.parse(newEntryValue);
       
-      // Call API to create entry - we need to handle this differently
-      // since fetchEntries doesn't accept these parameters
-      // We should use saveEntry from the context instead
+      // Call API to create entry
+      await saveEntry(selectedDatastore, newEntryKey, parsedValue);
       
       // Reset form and refresh entries
       setNewEntryKey("");
@@ -119,23 +170,52 @@ export function EntryList() {
       loadEntries();
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error";
-      toast("JSON parse error: " + message, "error", { duration: 3000 });
+      toast("JSON parse error: " + message, "error");
     }
   };
   
   const handleDeleteEntry = async () => {
     if (!entryToDelete) return;
     
-    // We need to use a different function for deletion
-    // since fetchEntries doesn't handle deletion
-    
-    setIsDeleteDialogOpen(false);
-    loadEntries();
+    try {
+      await deleteEntry(selectedDatastore, entryToDelete);
+      
+      // If we deleted the currently selected entry, clear the selection
+      if (entryToDelete === selectedEntryKey) {
+        setSelectedEntryKey("");
+      }
+      
+      setIsDeleteDialogOpen(false);
+      loadEntries();
+    } catch (error) {
+      console.error(`${DEBUG_PREFIX} Error deleting entry:`, error);
+      toast(`Error deleting entry: ${error instanceof Error ? error.message : String(error)}`, "error");
+    }
   };
   
+  // Modify the handleEntryClick function
   const handleEntryClick = useCallback((key: string) => {
+    console.log(`${DEBUG_PREFIX} Entry clicked: ${key}, preserving search state`);
+    
+    // Set a flag to indicate we're intentionally changing the selected entry
+    hasLoadedEntryRef.current = true;
+    
+    // Don't clear search when selecting an entry
     setSelectedEntryKey(key);
   }, [setSelectedEntryKey]);
+  
+  // Add a useEffect to handle selectedEntryKey changes without causing loops
+  useEffect(() => {
+    // This effect should only run when selectedEntryKey changes
+    console.log(`${DEBUG_PREFIX} Selected entry changed to: ${selectedEntryKey}`);
+    
+    // Reset the flag after a short delay to prevent immediate re-triggering
+    const timer = setTimeout(() => {
+      hasLoadedEntryRef.current = false;
+    }, 500);
+    
+    return () => clearTimeout(timer);
+  }, [selectedEntryKey]);
   
   // Debug effects to track state changes
   useEffect(() => {
@@ -145,10 +225,6 @@ export function EntryList() {
   useEffect(() => {
     console.log(`${DEBUG_PREFIX} 🔄 EntryList state changed - entries:`, entries);
   }, [entries]);
-  
-  const filteredEntries = entries.filter(entry => 
-    entry.toLowerCase().includes(searchTerm.toLowerCase())
-  );
   
   if (!selectedDatastore) {
     return (
@@ -172,14 +248,16 @@ export function EntryList() {
             <Button
               variant="outline"
               size="sm"
-              onClick={loadEntries}
+              onClick={() => loadEntries()}
+              disabled={isLoading || isSearching}
             >
-              <RefreshCw className="h-4 w-4" />
+              <RefreshCw className={`h-4 w-4 ${isLoading || isSearching ? 'animate-spin' : ''}`} />
             </Button>
             <Button
               variant="outline"
               size="sm"
               onClick={() => setIsCreateDialogOpen(true)}
+              disabled={isLoading || isSearching}
             >
               <Plus className="h-4 w-4" />
             </Button>
@@ -189,20 +267,77 @@ export function EntryList() {
       
       <CardContent>
         <div className="space-y-4">
-          <div className="relative">
-            <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search entries..."
-              className="pl-8"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search entries by prefix..."
+                className="pl-8"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                onKeyDown={handleSearchKeyDown}
+                disabled={isLoading || isSearching}
+              />
+              {searchTerm && (
+                <button 
+                  className="absolute right-2 top-2.5 text-muted-foreground hover:text-foreground"
+                  onClick={() => setSearchTerm("")}
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={handleSearch}
+              disabled={isLoading || isSearching}
+            >
+              {isSearching ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <Search className="h-4 w-4 mr-2" />
+              )}
+              Search
+            </Button>
+            {searchTerm && (
+              <Button 
+                variant="ghost" 
+                size="sm"
+                onClick={clearSearch}
+                disabled={isLoading || isSearching}
+              >
+                Clear
+              </Button>
+            )}
           </div>
           
+          {isViewingSearchResults.current && searchTerm && (
+            <div className="mb-2 px-2 py-1 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 text-sm rounded flex items-center justify-between">
+              <span>
+                Showing results for: <strong>{searchTerm}</strong>
+              </span>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="h-6 px-2"
+                onClick={clearSearch}
+              >
+                <X className="h-3 w-3 mr-1" />
+                Clear
+              </Button>
+            </div>
+          )}
+          
           <ScrollArea className="h-[400px] rounded-md border">
-            {filteredEntries.length > 0 ? (
+            {isSearching ? (
+              <div className="flex flex-col items-center justify-center h-full p-4">
+                <Loader2 className="h-8 w-8 animate-spin mb-2" />
+                <p className="text-muted-foreground">Searching...</p>
+              </div>
+            ) : entries.length > 0 ? (
               <div className="p-4">
-                {filteredEntries.map((entry) => (
+                {entries.map((entry) => (
                   <div
                     key={entry}
                     className={`p-3 rounded cursor-pointer flex justify-between items-center ${
@@ -232,7 +367,16 @@ export function EntryList() {
                 <AlertCircle className="h-8 w-8 mb-2" />
                 <p>No entries found</p>
                 <p className="text-xs mt-1">
-                  {searchTerm ? "Try a different search term" : "Create an entry to get started"}
+                  {searchTerm ? (
+                    <>
+                      No entries match &quot;<strong>{searchTerm}</strong>&quot;
+                      <Button variant="link" size="sm" className="h-auto p-0 ml-1" onClick={clearSearch}>
+                        Clear search
+                      </Button>
+                    </>
+                  ) : (
+                    "Create an entry to get started"
+                  )}
                 </p>
               </div>
             )}

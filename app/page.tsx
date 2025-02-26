@@ -22,7 +22,7 @@ import { Badge } from "@/components/ui/badge";
 import { QuickActionBar } from "@/components/QuickActionBar";
 import { DataVisualizer } from "@/components/DataVisualizer";
 import { NotificationCenter } from "@/components/NotificationCenter";
-import { CommandPalette } from "@/components/CommandPalette";
+// import { CommandPalette } from "@/components/CommandPalette";
 import { RecentActivity } from "@/components/RecentActivity";
 
 export default function Home() {
@@ -74,6 +74,10 @@ function DatastoreManager() {
     } catch (error) {
       console.error("Failed to fetch datastores:", error);
     }
+  };
+  
+  const handleDatastoreSelect = (name: string) => {
+    setSelectedDatastore(name);
   };
   
   return (
@@ -156,13 +160,13 @@ function DatastoreManager() {
                 <div className="space-y-2">
                   {datastores.map((datastore) => (
                     <Button
-                      key={datastore}
-                      variant={datastore === selectedDatastore ? "default" : "ghost"}
+                      key={datastore.name}
+                      variant={datastore.name === selectedDatastore ? "default" : "ghost"}
                       className="w-full justify-start"
-                      onClick={() => setSelectedDatastore(datastore)}
+                      onClick={() => handleDatastoreSelect(datastore.name)}
                     >
                       <Database className="mr-2 h-4 w-4" />
-                      {datastore}
+                      {datastore.name}
                     </Button>
                   ))}
                 </div>
