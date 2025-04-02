@@ -71,7 +71,7 @@ export function DatastoreProvider({ children }: { children: ReactNode }) {
 
   // Helper function for JSON fetching - moved up before it's used
   async function fetchJSON(url: string, options?: RequestInit) {
-    console.log('fetchJSON called with URL:', url);
+    // console.log('fetchJSON called with URL:', url);
     const res = await fetch(url, options);
     return res.json();
   }
