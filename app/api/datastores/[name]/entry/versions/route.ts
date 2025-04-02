@@ -21,6 +21,10 @@ export async function GET(req: NextRequest, { params }: { params: { name: string
       );
     }
 
+    const sortOrder = searchParams.get('sortOrder') || 'Descending';
+
+    console.log('sortOrder', sortOrder);
+
     try {
       const versionsData = await listEntryVersions(
         universeId,
@@ -28,7 +32,8 @@ export async function GET(req: NextRequest, { params }: { params: { name: string
         datastoreName,
         entryKey,
         scope,
-        limit
+        limit,
+        sortOrder
       );
 
       return NextResponse.json<DatastoreResponse>({

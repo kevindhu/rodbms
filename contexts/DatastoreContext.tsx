@@ -528,6 +528,8 @@ export function DatastoreProvider({ children }: { children: ReactNode }) {
           return [];
         }
 
+        // Return the versions array, which should now be properly sorted
+        // with the isLatest flag set on the newest version
         return result.versions || [];
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error';

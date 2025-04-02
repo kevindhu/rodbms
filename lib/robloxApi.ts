@@ -138,7 +138,8 @@ export async function listEntryVersions(
   datastoreName: string,
   entryKey: string,
   scope = '',
-  limit = 100
+  limit = 100,
+  sortOrder = 'Descending'
 ) {
   const apiUrl = `https://apis.roblox.com/datastores/v1/universes/${universeId}/standard-datastores/datastore/entries/entry/versions`;
   const response = await axios.get(apiUrl, {
@@ -146,7 +147,13 @@ export async function listEntryVersions(
       'x-api-key': apiToken,
       'Content-Type': 'application/json',
     },
-    params: { datastoreName, entryKey, scope, limit },
+    params: {
+      datastoreName,
+      entryKey,
+      scope,
+      limit,
+      sortOrder,
+    },
   });
   return response.data;
 }

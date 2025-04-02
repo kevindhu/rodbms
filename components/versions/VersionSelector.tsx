@@ -132,28 +132,25 @@ export function VersionSelector({ selectedDatastore, selectedEntryKey }: Version
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="max-h-[300px] overflow-y-auto">
-              {versions
-                .slice()
-                .reverse()
-                .map((version, index) => (
-                  <DropdownMenuItem
-                    key={version.version}
-                    onClick={() => handleVersionSelect(version, index)}
-                    className="flex flex-col items-start py-2"
-                  >
-                    <div className="font-medium">
-                      Version {index + 1} {/* Start with Version 1 at the top */}
-                      <span className="text-xs text-muted-foreground ml-2">
-                        ({formatVersion(version.version)})
-                      </span>
-                    </div>
-                    <div className="text-xs text-muted-foreground flex items-center gap-2">
-                      <span>{formatDate(version.createdTime)}</span>
-                      <span>{formatSize(version.contentLength)}</span>
-                      {version.deleted && <span className="text-red-500">(Deleted)</span>}
-                    </div>
-                  </DropdownMenuItem>
-                ))}
+              {versions.slice().map((version, index) => (
+                <DropdownMenuItem
+                  key={version.version}
+                  onClick={() => handleVersionSelect(version, index)}
+                  className="flex flex-col items-start py-2"
+                >
+                  <div className="font-medium">
+                    Version {index + 1} {/* Start with Version 1 at the top */}
+                    <span className="text-xs text-muted-foreground ml-2">
+                      ({formatVersion(version.version)})
+                    </span>
+                  </div>
+                  <div className="text-xs text-muted-foreground flex items-center gap-2">
+                    <span>{formatDate(version.createdTime)}</span>
+                    <span>{formatSize(version.contentLength)}</span>
+                    {version.deleted && <span className="text-red-500">(Deleted)</span>}
+                  </div>
+                </DropdownMenuItem>
+              ))}
             </DropdownMenuContent>
           </DropdownMenu>
         ) : null}
