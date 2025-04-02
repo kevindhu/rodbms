@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useDatastore } from '@/contexts/DatastoreContext';
 import { useToast } from '@/components/ui/toast';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
@@ -36,6 +36,7 @@ export function EntryDetailPanel() {
     isLoading,
     selectedVersion,
     setSelectedVersion,
+    setVersions,
   } = useDatastore();
 
   const { toast } = useToast();
@@ -46,13 +47,20 @@ export function EntryDetailPanel() {
   const [jsonError, setJsonError] = useState<string | null>(null);
   const [isLoadingEntry, setIsLoadingEntry] = useState(false);
 
+  // Add a ref to track previous values
+  const prevValuesRef = useRef({
+    selectedDatastore,
+    selectedEntryKey,
+    selectedVersion: selectedVersion?.version,
+  });
+
   // Memoize loadEntryData to avoid dependency issues
   const loadEntryData = useCallback(async () => {
     if (!selectedDatastore || !selectedEntryKey) return;
 
     setIsLoadingEntry(true);
     try {
-      console.log('Loading entry data for:', selectedDatastore, selectedEntryKey);
+      // console.log('Loading entry data for:', selectedDatastore, selectedEntryKey);
 
       let data;
 
@@ -122,6 +130,27 @@ export function EntryDetailPanel() {
 
   // Load entry data when selected entry changes or when a version is selected/deselected
   useEffect(() => {
+    // Compare current values with previous values
+    const prevValues = prevValuesRef.current;
+    const currentVersionId = selectedVersion?.version;
+
+    // Only proceed if there's an actual change in the values we care about
+    const hasChanged =
+      prevValues.selectedDatastore !== selectedDatastore ||
+      prevValues.selectedEntryKey !== selectedEntryKey ||
+      prevValues.selectedVersion !== currentVersionId;
+
+    if (!hasChanged) {
+      return;
+    }
+
+    // Update the ref with current values
+    prevValuesRef.current = {
+      selectedDatastore,
+      selectedEntryKey,
+      selectedVersion: currentVersionId,
+    };
+
     if (selectedDatastore && selectedEntryKey) {
       loadEntryData();
     } else {
@@ -170,13 +199,14 @@ export function EntryDetailPanel() {
 
       // After saving, clear the selected version since we're now on the latest version
       setSelectedVersion(null);
+      setVersions([]);
 
       // Update the last saved timestamp
       setLastSaved(new Date());
       setHasChanges(false);
 
-      // Refresh the entry data to show the latest version
-      loadEntryData();
+      // // Refresh the entry data to show the latest version
+      // loadEntryData();
     } catch (err) {
       console.error('Error saving entry:', err);
       toast('Failed to save entry', 'error');
@@ -188,6 +218,7 @@ export function EntryDetailPanel() {
     if (action === 'save' && !jsonError && hasChanges) {
       handleSave();
     } else if (action === 'refresh') {
+      console.log('Load entry data 2');
       loadEntryData();
     }
   };
@@ -213,7 +244,10 @@ export function EntryDetailPanel() {
               variant="outline"
               size="sm"
               className="flex items-center gap-1"
-              onClick={loadEntryData}
+              onClick={() => {
+                console.log('Load entry data 3');
+                loadEntryData();
+              }}
               disabled={isLoading || !selectedEntryKey}
             >
               <RefreshCw size={16} /> Refresh
@@ -258,8 +292,8 @@ export function EntryDetailPanel() {
                 </div>
               )}
 
-              {/* Warning when viewing a version */}
-              {selectedVersion && (
+              {/* Warning when viewing a version (except the latest version) */}
+              {selectedVersion && !selectedVersion.isLatest && (
                 <div className="mb-3 p-2 bg-yellow-50 dark:bg-yellow-950/30 border border-yellow-200 dark:border-yellow-800 rounded-md flex items-center text-sm text-yellow-600 dark:text-yellow-400">
                   <AlertTriangle className="h-4 w-4 mr-2 flex-shrink-0" />
                   <span>

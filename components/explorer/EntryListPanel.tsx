@@ -48,8 +48,11 @@ export function EntryListPanel() {
   // Add a ref to track if we're currently viewing search results
   const isViewingSearchResults = useRef(false);
 
-  // Track when loadEntries is recreated
-  const loadEntriesRecreationCount = useRef(0);
+  // Add a ref to track previous values
+  const prevValuesRef = useRef({
+    selectedDatastore,
+    searchTerm: '',
+  });
 
   // Set up mount/unmount tracking
   useEffect(() => {
@@ -60,12 +63,9 @@ export function EntryListPanel() {
     };
   }, []);
 
-  // Modified loadEntries to track recreation
+  // Modified loadEntries to be more stable
   const loadEntries = useCallback(
     async (search?: string) => {
-      // Increment recreation counter
-      loadEntriesRecreationCount.current++;
-
       if (!selectedDatastore) {
         return;
       }
@@ -73,7 +73,9 @@ export function EntryListPanel() {
       setIsSearching(true);
 
       try {
-        isViewingSearchResults.current = !!search;
+        const isSearching = !!search;
+
+        isViewingSearchResults.current = isSearching;
 
         const newEntries = await fetchEntries(selectedDatastore, search);
 
@@ -84,12 +86,16 @@ export function EntryListPanel() {
         setEntries(newEntries);
       } catch (error) {
         console.error(`Error loading entries:`, error);
-        toast(
-          `Error loading entries: ${error instanceof Error ? error.message : String(error)}`,
-          'error'
-        );
+        if (isMountedRef.current) {
+          toast(
+            `Error loading entries: ${error instanceof Error ? error.message : String(error)}`,
+            'error'
+          );
+        }
       } finally {
-        setIsSearching(false);
+        if (isMountedRef.current) {
+          setIsSearching(false);
+        }
       }
     },
     [selectedDatastore, fetchEntries, toast]
@@ -97,17 +103,45 @@ export function EntryListPanel() {
 
   // Add debugging to the useEffect
   useEffect(() => {
+    // Compare current values with previous values
+    const prevValues = prevValuesRef.current;
+
+    console.log('EntryListPanel effect triggered with values:', {
+      selectedDatastore,
+      wasViewingSearchResults: isViewingSearchResults.current,
+    });
+
+    console.log('Previous values were:', prevValues);
+
+    // Only proceed if there's an actual change in the datastore
+    const hasDatastoreChanged = prevValues.selectedDatastore !== selectedDatastore;
+
+    console.log('Datastore has changed:', hasDatastoreChanged);
+
+    // Update the ref with current values
+    prevValuesRef.current = {
+      selectedDatastore,
+      searchTerm,
+    };
+
     if (selectedDatastore) {
       // Reset search state when datastore changes
       const wasViewingSearchResults = isViewingSearchResults.current;
-      isViewingSearchResults.current = false;
 
-      // Clear search term if we were viewing search results
-      if (wasViewingSearchResults) {
-        setSearchTerm('');
+      if (hasDatastoreChanged) {
+        console.log('Datastore changed, resetting search state');
+        isViewingSearchResults.current = false;
+
+        // Clear search term if we were viewing search results
+        if (wasViewingSearchResults) {
+          setSearchTerm('');
+        }
+
+        console.log('Loading entries due to datastore change');
+        loadEntries();
+      } else {
+        console.log('Skipping loadEntries call - no actual datastore change');
       }
-
-      loadEntries();
     } else if (!selectedDatastore) {
       setEntries([]);
     }

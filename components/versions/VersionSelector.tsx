@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Loader2, Clock, ChevronDown } from 'lucide-react';
 import {
@@ -19,6 +19,7 @@ interface Version {
   contentLength: number;
   deleted: boolean;
   objectCreatedTime?: string;
+  isLatest?: boolean;
 }
 
 interface VersionSelectorProps {
@@ -27,17 +28,10 @@ interface VersionSelectorProps {
 }
 
 export function VersionSelector({ selectedDatastore, selectedEntryKey }: VersionSelectorProps) {
-  const { fetchEntryVersions, selectedVersion, setSelectedVersion } = useDatastore();
+  const { fetchEntryVersions, selectedVersion, setSelectedVersion, versions, setVersions } =
+    useDatastore();
 
-  const [versions, setVersions] = useState<Version[]>([]);
   const [loading, setLoading] = useState(false);
-
-  // Reset versions when selectedEntryKey changes
-  useEffect(() => {
-    setVersions([]);
-    // Also clear the selected version when changing entries
-    setSelectedVersion(null);
-  }, [selectedEntryKey, setSelectedVersion]);
 
   const loadVersions = async () => {
     if (!selectedDatastore || !selectedEntryKey) return;
@@ -64,14 +58,21 @@ export function VersionSelector({ selectedDatastore, selectedEntryKey }: Version
     }
   };
 
-  const handleVersionSelect = async (version: Version) => {
-    // Just update the selected version in the context
-    setSelectedVersion(version);
+  const handleVersionSelect = async (version: Version, index: number) => {
+    // Calculate if this is the latest version (index 0 after reversing is the oldest)
+    const isLatest = index === 0;
 
-    // No need to call fetchEntryVersion here anymore
-    // The EntryDetailPanel will react to the selectedVersion change
-    // and call fetchEntryVersion as needed
-    console.log(`Selected version ${version.version} of ${selectedEntryKey}`);
+    // Update the selected version in the context with the isLatest flag
+    setSelectedVersion({
+      ...version,
+      isLatest,
+    });
+
+    console.log(
+      `Selected version ${versions.length - index} (${
+        version.version
+      }) of ${selectedEntryKey}, isLatest: ${isLatest}`
+    );
   };
 
   // Format the date for display using local time
@@ -113,10 +114,11 @@ export function VersionSelector({ selectedDatastore, selectedEntryKey }: Version
         </h4>
         {selectedVersion && (
           <p className="text-xs text-muted-foreground">
-            Viewing: {formatVersion(selectedVersion.version)} (
-            {formatDate(selectedVersion.createdTime)})
+            Viewing: {selectedVersion.isLatest ? 'Latest' : formatVersion(selectedVersion.version)}{' '}
+            ({formatDate(selectedVersion.createdTime)})
             {selectedVersion.contentLength && ` - ${formatSize(selectedVersion.contentLength)}`}
             {selectedVersion.deleted && ' (Deleted)'}
+            {selectedVersion.isLatest && ' (Latest)'}
           </p>
         )}
       </div>
@@ -130,20 +132,28 @@ export function VersionSelector({ selectedDatastore, selectedEntryKey }: Version
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="max-h-[300px] overflow-y-auto">
-              {versions.map((version) => (
-                <DropdownMenuItem
-                  key={version.version}
-                  onClick={() => handleVersionSelect(version)}
-                  className="flex flex-col items-start py-2"
-                >
-                  <div className="font-medium">{formatVersion(version.version)}</div>
-                  <div className="text-xs text-muted-foreground flex items-center gap-2">
-                    <span>{formatDate(version.createdTime)}</span>
-                    <span>{formatSize(version.contentLength)}</span>
-                    {version.deleted && <span className="text-red-500">(Deleted)</span>}
-                  </div>
-                </DropdownMenuItem>
-              ))}
+              {versions
+                .slice()
+                .reverse()
+                .map((version, index) => (
+                  <DropdownMenuItem
+                    key={version.version}
+                    onClick={() => handleVersionSelect(version, index)}
+                    className="flex flex-col items-start py-2"
+                  >
+                    <div className="font-medium">
+                      Version {index + 1} {/* Start with Version 1 at the top */}
+                      <span className="text-xs text-muted-foreground ml-2">
+                        ({formatVersion(version.version)})
+                      </span>
+                    </div>
+                    <div className="text-xs text-muted-foreground flex items-center gap-2">
+                      <span>{formatDate(version.createdTime)}</span>
+                      <span>{formatSize(version.contentLength)}</span>
+                      {version.deleted && <span className="text-red-500">(Deleted)</span>}
+                    </div>
+                  </DropdownMenuItem>
+                ))}
             </DropdownMenuContent>
           </DropdownMenu>
         ) : null}

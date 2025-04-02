@@ -26,6 +26,8 @@ interface DatastoreContextType {
   setEntryData: (data: string) => void;
   selectedVersion: Version | null;
   setSelectedVersion: (version: Version | null) => void;
+  versions: Version[];
+  setVersions: (versions: Version[]) => void;
   fetchDatastores: () => Promise<void>;
   fetchEntries: (datastoreName: string, searchQuery?: string) => Promise<string[]>;
   fetchEntry: (datastoreName: string, key: string) => Promise<any>;
@@ -44,6 +46,7 @@ interface Version {
   contentLength: number;
   deleted: boolean;
   objectCreatedTime?: string;
+  isLatest?: boolean;
 }
 
 const DatastoreContext = createContext<DatastoreContextType | undefined>(undefined);
@@ -72,6 +75,7 @@ export function DatastoreProvider({ children }: { children: ReactNode }) {
   const [entryData, setEntryData] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [selectedVersion, setSelectedVersion] = useState<Version | null>(null);
+  const [versions, setVersions] = useState<Version[]>([]);
 
   // Use a ref to track live mode state to avoid unnecessary re-renders
   const liveMode = useRef(false);
@@ -562,21 +566,30 @@ export function DatastoreProvider({ children }: { children: ReactNode }) {
         }
 
         const data = await response.json();
-        console.log('Version data:', data);
+        // Handle empty string response
+        let processedData = data;
+        if (data === '') {
+          processedData = {
+            error: true,
+            status: 404,
+            message: 'Entry not found or has been deleted',
+          };
+        }
+        console.log('Version data:', processedData);
 
         // Update the entry data with the version data
-        if (data) {
+        if (processedData) {
           try {
-            const formattedJson = JSON.stringify(data, null, 2);
+            const formattedJson = JSON.stringify(processedData, null, 2);
             setEntryData(formattedJson);
 
             // Log the formatted JSON
             console.log('Formatted version data:', formattedJson);
 
-            return data;
+            return processedData;
           } catch (err) {
             console.error('Error formatting version data:', err);
-            return data;
+            return processedData;
           }
         }
 
@@ -592,6 +605,12 @@ export function DatastoreProvider({ children }: { children: ReactNode }) {
     },
     [universeId, apiToken, toast, setEntryData]
   );
+
+  // Reset versions when selectedEntryKey changes
+  useEffect(() => {
+    setVersions([]);
+    setSelectedVersion(null);
+  }, [selectedEntryKey]);
 
   return (
     <DatastoreContext.Provider
@@ -610,6 +629,8 @@ export function DatastoreProvider({ children }: { children: ReactNode }) {
         setEntryData,
         selectedVersion,
         setSelectedVersion,
+        versions,
+        setVersions,
         fetchDatastores,
         fetchEntries,
         fetchEntry,
