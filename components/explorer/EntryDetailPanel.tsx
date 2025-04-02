@@ -42,7 +42,10 @@ export function EntryDetailPanel() {
 
     setIsLoadingEntry(true);
     try {
+      console.log('Loading entry data for:', selectedDatastore, selectedEntryKey);
+
       const data = await fetchEntry(selectedDatastore, selectedEntryKey);
+
       if (data) {
         try {
           const formattedJson = JSON.stringify(data, null, 2);

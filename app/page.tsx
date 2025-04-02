@@ -1,11 +1,11 @@
-"use client";
+'use client';
 
-import { CustomToastProvider } from "@/components/ui/toast";
-import { DatastoreProvider } from "@/contexts/DatastoreContext";
-import { WelcomeModal } from "@/components/WelcomeModal";
-import { NotificationCenter } from "@/components/NotificationCenter";
-import { StatusBar } from "@/components/StatusBar";
-import { DatastoreManagerScreen } from "@/components/DatastoreManagerScreen";
+import { CustomToastProvider } from '@/components/ui/toast';
+import { DatastoreProvider } from '@/contexts/DatastoreContext';
+import { WelcomeModal } from '@/components/WelcomeModal';
+import { NotificationCenter } from '@/components/NotificationCenter';
+import { StatusBar } from '@/components/StatusBar';
+import { DatastoreManagerScreen } from '@/components/DatastoreManagerScreen';
 
 export default function Home() {
   return (

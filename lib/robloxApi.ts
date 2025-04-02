@@ -13,8 +13,8 @@ export async function getDatastores(universeId: string, apiToken: string) {
 }
 
 export async function getDataStoreEntries(
-  universeId: string, 
-  apiToken: string, 
+  universeId: string,
+  apiToken: string,
   datastoreName: string,
   prefix: string = '',
   cursor: string = '',
@@ -26,17 +26,23 @@ export async function getDataStoreEntries(
       'x-api-key': apiToken,
       'Content-Type': 'application/json',
     },
-    params: { 
-      datastoreName, 
+    params: {
+      datastoreName,
       prefix,
       cursor,
-      limit 
+      limit,
     },
   });
   return response.data;
 }
 
-export async function getDataStoreEntry(universeId: string, apiToken: string, datastoreName: string, entryKey: string, scope = '') {
+export async function getDataStoreEntry(
+  universeId: string,
+  apiToken: string,
+  datastoreName: string,
+  entryKey: string,
+  scope = ''
+) {
   const apiUrl = `https://apis.roblox.com/datastores/v1/universes/${universeId}/standard-datastores/datastore/entries/entry`;
   const response = await axios.get(apiUrl, {
     headers: {
@@ -68,10 +74,10 @@ export async function setDataStoreEntry(
 ) {
   const apiUrl = `https://apis.roblox.com/datastores/v1/universes/${universeId}/standard-datastores/datastore/entries/entry`;
   const jsonValue = JSON.stringify(value);
-  const params: DataStoreParams = { 
-    datastoreName, 
-    entryKey, 
-    scope 
+  const params: DataStoreParams = {
+    datastoreName,
+    entryKey,
+    scope,
   };
   if (matchVersion) params.matchVersion = matchVersion;
   if (exclusiveCreate !== undefined) params.exclusiveCreate = exclusiveCreate;
@@ -86,7 +92,14 @@ export async function setDataStoreEntry(
   return response.data;
 }
 
-export async function incrementDataStoreEntry(universeId: string, apiToken: string, datastoreName: string, entryKey: string, incrementBy: number, scope = '') {
+export async function incrementDataStoreEntry(
+  universeId: string,
+  apiToken: string,
+  datastoreName: string,
+  entryKey: string,
+  incrementBy: number,
+  scope = ''
+) {
   const apiUrl = `https://apis.roblox.com/datastores/v1/universes/${universeId}/standard-datastores/datastore/entries/entry/increment`;
   const params = { datastoreName, entryKey, incrementBy, scope };
 
@@ -101,7 +114,13 @@ export async function incrementDataStoreEntry(universeId: string, apiToken: stri
   return response.data;
 }
 
-export async function deleteDataStoreEntry(universeId: string, apiToken: string, datastoreName: string, entryKey: string, scope = '') {
+export async function deleteDataStoreEntry(
+  universeId: string,
+  apiToken: string,
+  datastoreName: string,
+  entryKey: string,
+  scope = 'global'
+) {
   const apiUrl = `https://apis.roblox.com/datastores/v1/universes/${universeId}/standard-datastores/datastore/entries/entry`;
   const response = await axios.delete(apiUrl, {
     headers: {

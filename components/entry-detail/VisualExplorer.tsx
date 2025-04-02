@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, ReactNode } from 'react';
+import { useState, useRef, ReactNode, useEffect } from 'react';
 import { Loader2, ChevronRight, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -278,17 +278,20 @@ export function VisualExplorer({ data, isLoading, onDataChange }: VisualExplorer
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set(['']));
   const [editingPath, setEditingPath] = useState<string | null>(null);
   const [editValue, setEditValue] = useState<string>('');
+  const initializedRef = useRef(false);
 
-  // Initialize expanded paths when data changes
-  if (data && expandedPaths.size <= 1) {
-    const topLevelPaths = new Set(['']);
-    if (typeof data === 'object' && data !== null) {
-      Object.keys(data).forEach((key) => topLevelPaths.add(`.${key}`));
-      if (expandedPaths.size <= 1) {
+  // Move initialization to useEffect to prevent infinite renders
+  useEffect(() => {
+    // Only run this once when data first loads
+    if (data && !initializedRef.current) {
+      const topLevelPaths = new Set(['']);
+      if (typeof data === 'object' && data !== null) {
+        Object.keys(data).forEach((key) => topLevelPaths.add(`.${key}`));
         setExpandedPaths(topLevelPaths);
       }
+      initializedRef.current = true;
     }
-  }
+  }, [data]);
 
   const togglePath = (path: string) => {
     const newExpandedPaths = new Set(expandedPaths);

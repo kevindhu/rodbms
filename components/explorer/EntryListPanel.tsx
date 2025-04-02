@@ -42,9 +42,6 @@ export function EntryListPanel() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [entryToDelete, setEntryToDelete] = useState('');
 
-  // Track previous entries to prevent unnecessary updates
-  const prevEntriesRef = useRef<string[]>([]);
-
   // Track if component is mounted to prevent state updates after unmount
   const isMountedRef = useRef(true);
 

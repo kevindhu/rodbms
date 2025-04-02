@@ -69,6 +69,9 @@ export function DatastoreProvider({ children }: { children: ReactNode }) {
   // Tracks the previous datastore to prevent unnecessary re-renders
   const prevDatastoreRef = useRef<string>('');
 
+  // Add a ref to track known deleted entries
+  const deletedEntriesRef = useRef<Set<string>>(new Set());
+
   // Helper function for JSON fetching - moved up before it's used
   async function fetchJSON(url: string, options?: RequestInit) {
     // console.log('fetchJSON called with URL:', url);
@@ -97,8 +100,6 @@ export function DatastoreProvider({ children }: { children: ReactNode }) {
         // Add a cache-busting parameter for live mode to prevent browser caching
         const finalUrl = liveMode.current ? `${baseUrl}&_t=${Date.now()}` : baseUrl;
 
-        // console.log('Fetching entries from URL:', finalUrl);
-
         // Use fetch with headers instead of fetchJSON
         const response = await fetch(finalUrl, {
           method: 'GET',
@@ -109,7 +110,6 @@ export function DatastoreProvider({ children }: { children: ReactNode }) {
         });
 
         const data = await response.json();
-        // console.log('Received data from entries API:', data);
 
         if (data.error) {
           console.error('API returned error:', data.error);
@@ -151,11 +151,16 @@ export function DatastoreProvider({ children }: { children: ReactNode }) {
   const setSelectedDatastoreWithCheck = useCallback(
     (datastore: string) => {
       if (datastore !== prevDatastoreRef.current) {
+        // Reset entry key and data when datastore changes
+        setSelectedEntryKey('');
+        setEntryData('');
+
+        // Update the selected datastore
         setSelectedDatastore(datastore);
         prevDatastoreRef.current = datastore;
       }
     },
-    [setSelectedDatastore, setSelectedEntryKey]
+    [setSelectedDatastore, setSelectedEntryKey, setEntryData]
   );
 
   // Updated setSelectedEntryKeyWithCheck function that uses current state values
@@ -220,19 +225,22 @@ export function DatastoreProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // This will clear the selected entry when the datastore changes
-  useEffect(() => {
-    setSelectedEntryKey('');
-    setEntryData('');
-  }, [selectedDatastore]);
+  // Fetch a single entry from a datastore
+  const fetchEntry = useCallback(
+    async (datastoreName: string, key: string) => {
+      // Create a composite key to track deleted entries
+      const compositeKey = `${datastoreName}:${key}`;
 
-  // Add a debounce mechanism for fetchEntry
-  const fetchEntryWithDebounce = useCallback(
-    debounce(async (datastoreName: string, key: string) => {
-      // console.log(`Debounced fetchEntry called with datastoreName: ${datastoreName}, key: ${key}`);
+      // Skip fetching if we already know this entry is deleted
+      if (deletedEntriesRef.current.has(compositeKey)) {
+        return {
+          error: true,
+          status: 404,
+          message: 'Entry not found or has been deleted',
+        };
+      }
 
       if (fetchingRef.current) {
-        console.log('🛑 SKIPPING fetchEntry while loading');
         return null;
       }
 
@@ -244,8 +252,6 @@ export function DatastoreProvider({ children }: { children: ReactNode }) {
           datastoreName
         )}/entry?universeId=${universeId}&entryKey=${encodeURIComponent(key)}`;
 
-        // console.log(`Fetching entry from URL: ${url}`);
-
         const response = await fetch(url, {
           method: 'GET',
           headers: {
@@ -254,9 +260,25 @@ export function DatastoreProvider({ children }: { children: ReactNode }) {
           },
         });
 
+        // Special handling for 404 errors (deleted entries)
+        if (response.status === 404) {
+          toast('Entry not found or has been deleted', 'error');
+          setEntryData(''); // Clear entry data for deleted entries
+          // Mark this entry as deleted to prevent future fetch attempts
+          deletedEntriesRef.current.add(compositeKey);
+          return {
+            error: true,
+            status: 404,
+            message: 'Entry not found or has been deleted',
+          };
+        }
+
         if (!response.ok) {
           throw new Error(`HTTP error! Status: ${response.status}`);
         }
+
+        // If we get here, the entry exists, so remove it from deleted entries if it was there
+        deletedEntriesRef.current.delete(compositeKey);
 
         const result = await response.json();
 
@@ -280,28 +302,14 @@ export function DatastoreProvider({ children }: { children: ReactNode }) {
         return result;
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error';
-        console.error('❌ Error fetching entry:', message);
-
         toast('Failed to fetch entry: ' + message, 'error');
         return null;
       } finally {
-        // console.log('⏳ Setting isLoading to FALSE');
         setIsLoading(false);
         fetchingRef.current = false;
       }
-    }, 300),
-    [universeId, apiToken, toast]
-  );
-
-  // Replace the fetchEntry function with this
-  const fetchEntry = useCallback(
-    async (datastoreName: string, key: string) => {
-      // console.log(`fetchEntry called with datastoreName: ${datastoreName}, key: ${key}`);
-
-      // Use the debounced version to prevent rapid successive calls
-      return fetchEntryWithDebounce(datastoreName, key);
     },
-    [fetchEntryWithDebounce]
+    [universeId, apiToken, toast]
   );
 
   // Update saveEntry to use headers
@@ -419,14 +427,24 @@ export function DatastoreProvider({ children }: { children: ReactNode }) {
     console.log('createDatastore called with datastoreName:', datastoreName);
     setIsLoading(true);
     try {
-      const res = await fetchJSON(
-        `/api/datastores/${encodeURIComponent(
-          datastoreName
-        )}/create?universeId=${universeId}&apiToken=${apiToken}`,
-        {
-          method: 'POST',
-        }
-      );
+      // Make sure we have all required parameters
+      if (!datastoreName || !universeId || !apiToken) {
+        console.error('Missing required parameters for datastore creation');
+        toast('Missing required parameters for datastore creation', 'error');
+        return false;
+      }
+
+      const res = await fetchJSON(`/api/datastores/create`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          universeId,
+          apiToken, // Move API token to the request body
+          datastoreName,
+        }),
+      });
 
       if (res.error) {
         toast('Failed to create datastore: ' + res.error, 'error');
