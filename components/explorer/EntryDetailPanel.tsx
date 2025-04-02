@@ -15,6 +15,7 @@ import { KeyboardShortcuts } from '@/components/KeyboardShortcuts';
 import { JsonEditor } from '@/components/entry-detail/JsonEditor';
 import { FormattedView } from '@/components/entry-detail/FormattedView';
 import { VisualExplorer } from '@/components/entry-detail/VisualExplorer';
+import { VersionSelector } from '@/components/versions/VersionSelector';
 
 // Define a type for JSON data
 export type JsonValue =
@@ -26,7 +27,16 @@ export type JsonValue =
   | JsonValue[];
 
 export function EntryDetailPanel() {
-  const { selectedDatastore, selectedEntryKey, fetchEntry, saveEntry, isLoading } = useDatastore();
+  const {
+    selectedDatastore,
+    selectedEntryKey,
+    fetchEntry,
+    fetchEntryVersion,
+    saveEntry,
+    isLoading,
+    selectedVersion,
+    setSelectedVersion,
+  } = useDatastore();
 
   const { toast } = useToast();
   const [entryData, setEntryData] = useState('');
@@ -44,7 +54,49 @@ export function EntryDetailPanel() {
     try {
       console.log('Loading entry data for:', selectedDatastore, selectedEntryKey);
 
-      const data = await fetchEntry(selectedDatastore, selectedEntryKey);
+      let data;
+
+      // If a version is selected, fetch that specific version
+      if (selectedVersion) {
+        console.log(`Loading version ${selectedVersion.version} of entry ${selectedEntryKey}`);
+        data = await fetchEntryVersion(
+          selectedDatastore,
+          selectedEntryKey,
+          selectedVersion.version
+        );
+      } else {
+        // Otherwise fetch the latest version
+        data = await fetchEntry(selectedDatastore, selectedEntryKey);
+      }
+
+      console.log('Data:', data);
+
+      // Check if we got an error response
+      if (data && data.error === true) {
+        // Handle 404 or other error responses
+        console.log('Error:', data.message);
+
+        // Format the error as JSON to display in the editor
+        const errorJson = JSON.stringify(
+          {
+            error: true,
+            status: data.status,
+            message: data.message,
+          },
+          null,
+          2
+        );
+
+        setEntryData(errorJson);
+        setFormattedData({
+          error: true,
+          status: data.status,
+          message: data.message,
+        } as JsonValue);
+
+        // No need to show another toast as fetchEntry already did
+        return;
+      }
 
       if (data) {
         try {
@@ -66,55 +118,72 @@ export function EntryDetailPanel() {
     } finally {
       setIsLoadingEntry(false);
     }
-  }, [selectedDatastore, selectedEntryKey, fetchEntry]);
+  }, [selectedDatastore, selectedEntryKey, fetchEntry, fetchEntryVersion, selectedVersion]);
 
-  // Reset state when datastore or entry key changes
+  // Load entry data when selected entry changes or when a version is selected/deselected
   useEffect(() => {
-    setEntryData('');
-    setFormattedData(null);
-    setLastSaved(null);
-    setHasChanges(false);
-    setJsonError(null);
-
-    // Only load data if both datastore and entry key are selected
     if (selectedDatastore && selectedEntryKey) {
       loadEntryData();
+    } else {
+      setEntryData('');
+      setFormattedData(null);
     }
-  }, [selectedDatastore, selectedEntryKey, loadEntryData]);
+  }, [selectedDatastore, selectedEntryKey, selectedVersion, loadEntryData]);
 
-  const handleDataChange = (value: string | undefined) => {
-    if (value === undefined) return;
-
+  // Handle data changes in the editor
+  const handleDataChange = (value: string) => {
     setEntryData(value);
     setHasChanges(true);
 
     try {
+      // Try to parse the JSON to validate it
       const parsed = JSON.parse(value);
-      setFormattedData(parsed as JsonValue);
+      setFormattedData(parsed);
       setJsonError(null);
     } catch (err) {
-      if (err instanceof Error) {
-        setJsonError(err.message);
-      } else {
-        setJsonError('Invalid JSON');
-      }
+      // If parsing fails, set an error message
+      setJsonError((err as Error).message);
     }
   };
 
+  // Handle save button click
   const handleSave = async () => {
     if (!selectedDatastore || !selectedEntryKey || jsonError) return;
 
     try {
-      const parsedData = JSON.parse(entryData);
-      await saveEntry(selectedDatastore, selectedEntryKey, parsedData);
+      // Parse the JSON data
+      const data = JSON.parse(entryData);
+
+      // If we're viewing a version, warn the user they're overwriting with an old version
+      if (selectedVersion) {
+        const confirmOverwrite = window.confirm(
+          `You are about to save data from version ${selectedVersion.version} as the current version. Continue?`
+        );
+
+        if (!confirmOverwrite) {
+          return;
+        }
+      }
+
+      // Save the entry
+      await saveEntry(selectedDatastore, selectedEntryKey, data);
+
+      // After saving, clear the selected version since we're now on the latest version
+      setSelectedVersion(null);
+
+      // Update the last saved timestamp
       setLastSaved(new Date());
       setHasChanges(false);
-      toast('Entry saved successfully', 'success');
+
+      // Refresh the entry data to show the latest version
+      loadEntryData();
     } catch (err) {
+      console.error('Error saving entry:', err);
       toast('Failed to save entry', 'error');
     }
   };
 
+  // Handle keyboard shortcuts
   const handleShortcut = (action: string) => {
     if (action === 'save' && !jsonError && hasChanges) {
       handleSave();
@@ -123,32 +192,17 @@ export function EntryDetailPanel() {
     }
   };
 
-  // If no entry is selected, show the placeholder
-  if (!selectedEntryKey) {
-    return (
-      <div className="h-full">
-        <div className="flex flex-col items-center justify-center h-full text-muted-foreground border rounded-md p-4">
-          <Key className="h-16 w-16 mb-4 opacity-20" />
-          <p>Select an entry to view and edit its data</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Otherwise, show the editor
   return (
     <div className="h-full">
-      <Card className="shadow-sm h-full">
-        <CardHeader className="pb-3 flex flex-row items-center justify-between">
+      <Card className="h-full flex flex-col">
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <div>
-            <CardTitle className="text-lg flex items-center">
+            <CardTitle className="text-xl flex items-center">
               Entry Details
-              {hasChanges && (
-                <Badge
-                  variant="outline"
-                  className="ml-2 text-amber-500 border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800"
-                >
-                  Unsaved changes
+              {selectedEntryKey && (
+                <Badge variant="outline" className="ml-2 font-mono">
+                  <Key className="h-3 w-3 mr-1" />
+                  {selectedEntryKey}
                 </Badge>
               )}
             </CardTitle>
@@ -160,7 +214,7 @@ export function EntryDetailPanel() {
               size="sm"
               className="flex items-center gap-1"
               onClick={loadEntryData}
-              disabled={isLoading}
+              disabled={isLoading || !selectedEntryKey}
             >
               <RefreshCw size={16} /> Refresh
             </Button>
@@ -169,7 +223,7 @@ export function EntryDetailPanel() {
               size="sm"
               className="flex items-center gap-1"
               onClick={handleSave}
-              disabled={isLoading || !!jsonError || !hasChanges}
+              disabled={isLoading || !!jsonError || !hasChanges || !selectedEntryKey}
             >
               {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save size={16} />} Save
             </Button>
@@ -177,57 +231,95 @@ export function EntryDetailPanel() {
         </CardHeader>
 
         <CardContent>
-          {/* Error message display */}
-          {jsonError && (
-            <div className="mb-3 p-2 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-md flex items-center text-sm text-red-600 dark:text-red-400">
-              <AlertTriangle className="h-4 w-4 mr-2 flex-shrink-0" />
-              <span className="truncate">{jsonError}</span>
+          {/* Show a message when no entry is selected */}
+          {!selectedEntryKey ? (
+            <div className="flex flex-col items-center justify-center h-[400px] text-center p-4">
+              <div className="rounded-full bg-muted p-3 mb-4">
+                <Key className="h-6 w-6 text-muted-foreground" />
+              </div>
+              <h3 className="text-lg font-medium mb-2">No Entry Selected</h3>
+              <p className="text-muted-foreground max-w-md">
+                Select an entry from the list on the left to view and edit its data.
+              </p>
             </div>
+          ) : (
+            <>
+              {/* Version selector */}
+              <VersionSelector
+                selectedDatastore={selectedDatastore}
+                selectedEntryKey={selectedEntryKey}
+              />
+
+              {/* Error message display */}
+              {jsonError && (
+                <div className="mb-3 p-2 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-md flex items-center text-sm text-red-600 dark:text-red-400">
+                  <AlertTriangle className="h-4 w-4 mr-2 flex-shrink-0" />
+                  <span className="truncate">{jsonError}</span>
+                </div>
+              )}
+
+              {/* Warning when viewing a version */}
+              {selectedVersion && (
+                <div className="mb-3 p-2 bg-yellow-50 dark:bg-yellow-950/30 border border-yellow-200 dark:border-yellow-800 rounded-md flex items-center text-sm text-yellow-600 dark:text-yellow-400">
+                  <AlertTriangle className="h-4 w-4 mr-2 flex-shrink-0" />
+                  <span>
+                    You are viewing a historical version of this entry. Saving will overwrite the
+                    current version.
+                  </span>
+                </div>
+              )}
+
+              {/* Tabs for different views */}
+              <Tabs defaultValue="json" className="w-full">
+                <TabsList className="w-full justify-start mb-4">
+                  <TabsTrigger value="json">JSON Editor</TabsTrigger>
+                  <TabsTrigger value="formatted">Formatted View</TabsTrigger>
+                  <TabsTrigger value="visual">Visual Explorer</TabsTrigger>
+                </TabsList>
+
+                {/* JSON Editor Tab */}
+                <TabsContent value="json" className="min-h-[400px]">
+                  <JsonEditor
+                    value={entryData}
+                    onChange={(value) => handleDataChange(value || '')}
+                    isLoading={isLoadingEntry}
+                  />
+                </TabsContent>
+
+                {/* Formatted View Tab */}
+                <TabsContent value="formatted">
+                  <FormattedView data={formattedData} isLoading={isLoadingEntry} />
+                </TabsContent>
+
+                {/* Visual Explorer Tab */}
+                <TabsContent value="visual">
+                  <VisualExplorer
+                    data={formattedData}
+                    isLoading={isLoadingEntry}
+                    onDataChange={(newData) => {
+                      const newEntryData = JSON.stringify(newData, null, 2);
+                      setEntryData(newEntryData);
+                      setFormattedData(newData);
+                      setHasChanges(true);
+                    }}
+                  />
+                </TabsContent>
+              </Tabs>
+            </>
           )}
-
-          {/* Tabs for different views */}
-          <Tabs defaultValue="json" className="w-full">
-            <TabsList className="w-full justify-start mb-4">
-              <TabsTrigger value="json">JSON Editor</TabsTrigger>
-              <TabsTrigger value="formatted">Formatted View</TabsTrigger>
-              <TabsTrigger value="visual">Visual Explorer</TabsTrigger>
-            </TabsList>
-
-            {/* JSON Editor Tab */}
-            <TabsContent value="json" className="min-h-[400px]">
-              <JsonEditor
-                value={entryData}
-                onChange={handleDataChange}
-                isLoading={isLoadingEntry}
-              />
-            </TabsContent>
-
-            {/* Formatted View Tab */}
-            <TabsContent value="formatted">
-              <FormattedView data={formattedData} isLoading={isLoadingEntry} />
-            </TabsContent>
-
-            {/* Visual Explorer Tab */}
-            <TabsContent value="visual">
-              <VisualExplorer
-                data={formattedData}
-                isLoading={isLoadingEntry}
-                onDataChange={(newData) => {
-                  const newEntryData = JSON.stringify(newData, null, 2);
-                  setEntryData(newEntryData);
-                  setFormattedData(newData);
-                  setHasChanges(true);
-                }}
-              />
-            </TabsContent>
-          </Tabs>
         </CardContent>
 
         {/* Last saved timestamp */}
-        {lastSaved && (
+        {lastSaved && selectedEntryKey && (
           <CardFooter className="text-xs text-muted-foreground flex items-center pt-0">
             <Clock className="h-3 w-3 mr-1" />
             Last saved: {format(lastSaved, 'MMM d, yyyy h:mm a')}
+            {selectedVersion && (
+              <span className="ml-2">
+                (Viewing version from{' '}
+                {format(new Date(selectedVersion.createdTime), 'MMM d, yyyy h:mm a')})
+              </span>
+            )}
           </CardFooter>
         )}
 

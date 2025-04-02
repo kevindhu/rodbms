@@ -24,6 +24,8 @@ interface DatastoreContextType {
   setSelectedEntryKey: (key: string) => void;
   entryData: string;
   setEntryData: (data: string) => void;
+  selectedVersion: Version | null;
+  setSelectedVersion: (version: Version | null) => void;
   fetchDatastores: () => Promise<void>;
   fetchEntries: (datastoreName: string, searchQuery?: string) => Promise<string[]>;
   fetchEntry: (datastoreName: string, key: string) => Promise<any>;
@@ -32,6 +34,16 @@ interface DatastoreContextType {
   isLoading: boolean;
   clearCredentials: () => void;
   createDatastore: (datastoreName: string) => Promise<boolean>;
+  fetchEntryVersions: (datastoreName: string, key: string) => Promise<any[]>;
+  fetchEntryVersion: (datastoreName: string, key: string, versionId: string) => Promise<any>;
+}
+
+interface Version {
+  version: string;
+  createdTime: string;
+  contentLength: number;
+  deleted: boolean;
+  objectCreatedTime?: string;
 }
 
 const DatastoreContext = createContext<DatastoreContextType | undefined>(undefined);
@@ -59,6 +71,7 @@ export function DatastoreProvider({ children }: { children: ReactNode }) {
   const [selectedEntryKey, setSelectedEntryKey] = useState('');
   const [entryData, setEntryData] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [selectedVersion, setSelectedVersion] = useState<Version | null>(null);
 
   // Use a ref to track live mode state to avoid unnecessary re-renders
   const liveMode = useRef(false);
@@ -154,6 +167,7 @@ export function DatastoreProvider({ children }: { children: ReactNode }) {
         // Reset entry key and data when datastore changes
         setSelectedEntryKey('');
         setEntryData('');
+        setSelectedVersion(null);
 
         // Update the selected datastore
         setSelectedDatastore(datastore);
@@ -264,6 +278,7 @@ export function DatastoreProvider({ children }: { children: ReactNode }) {
         if (response.status === 404) {
           toast('Entry not found or has been deleted', 'error');
           setEntryData(''); // Clear entry data for deleted entries
+          setSelectedVersion(null);
           // Mark this entry as deleted to prevent future fetch attempts
           deletedEntriesRef.current.add(compositeKey);
           return {
@@ -475,10 +490,108 @@ export function DatastoreProvider({ children }: { children: ReactNode }) {
     setSelectedDatastore('');
     setSelectedEntryKey('');
     setEntryData('');
+    setSelectedVersion(null);
     localStorage.removeItem('universeId');
     localStorage.removeItem('apiToken');
     toast('Disconnected successfully', 'success');
   };
+
+  // Fetch versions of an entry
+  const fetchEntryVersions = useCallback(
+    async (datastoreName: string, key: string) => {
+      setIsLoading(true);
+      try {
+        const url = `/api/datastores/${encodeURIComponent(
+          datastoreName
+        )}/entry/versions?universeId=${universeId}&entryKey=${encodeURIComponent(key)}`;
+
+        const response = await fetch(url, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': apiToken,
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+
+        const result = await response.json();
+
+        if (result.error) {
+          toast('Failed to fetch versions: ' + result.error, 'error');
+          return [];
+        }
+
+        return result.versions || [];
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        toast('Failed to fetch entry versions: ' + message, 'error');
+        return [];
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [universeId, apiToken, toast]
+  );
+
+  // Fetch a specific version of an entry
+  const fetchEntryVersion = useCallback(
+    async (datastoreName: string, key: string, versionId: string) => {
+      setIsLoading(true);
+      try {
+        console.log(`Fetching version ${versionId} of entry ${key} in datastore ${datastoreName}`);
+
+        const url = `/api/datastores/${encodeURIComponent(
+          datastoreName
+        )}/entry/versions/version?universeId=${universeId}&entryKey=${encodeURIComponent(
+          key
+        )}&versionId=${encodeURIComponent(versionId)}`;
+
+        const response = await fetch(url, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': apiToken,
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        console.log('Version data:', data);
+
+        // Update the entry data with the version data
+        if (data) {
+          try {
+            const formattedJson = JSON.stringify(data, null, 2);
+            setEntryData(formattedJson);
+
+            // Log the formatted JSON
+            console.log('Formatted version data:', formattedJson);
+
+            return data;
+          } catch (err) {
+            console.error('Error formatting version data:', err);
+            return data;
+          }
+        }
+
+        return null;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        console.error('Error fetching entry version:', message);
+        toast('Failed to fetch entry version: ' + message, 'error');
+        return null;
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [universeId, apiToken, toast, setEntryData]
+  );
 
   return (
     <DatastoreContext.Provider
@@ -495,6 +608,8 @@ export function DatastoreProvider({ children }: { children: ReactNode }) {
         setSelectedEntryKey: setSelectedEntryKeyWithCheck,
         entryData,
         setEntryData,
+        selectedVersion,
+        setSelectedVersion,
         fetchDatastores,
         fetchEntries,
         fetchEntry,
@@ -503,6 +618,8 @@ export function DatastoreProvider({ children }: { children: ReactNode }) {
         isLoading,
         clearCredentials,
         createDatastore,
+        fetchEntryVersions,
+        fetchEntryVersion,
       }}
     >
       {children}
