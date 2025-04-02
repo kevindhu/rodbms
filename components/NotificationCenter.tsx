@@ -32,7 +32,7 @@ export function NotificationCenter() {
       {
         id: "1",
         title: "Welcome to DBMS",
-        message: "Thanks for using Roblox Database Management System!",
+        message: "You are awesome for using this tool!",
         timestamp: new Date(),
         read: false,
         type: "info"
@@ -50,6 +50,14 @@ export function NotificationCenter() {
         title: "Connection Warning",
         message: "Your API token will expire in 2 days.",
         timestamp: new Date(Date.now() - 7200000),
+        read: false,
+        type: "warning"
+      },
+      {
+        id: "4",
+        title: "Cosmic Potato Alert",
+        message: "Your computer has been invaded by dancing pickles from Jupiter. Please feed them virtual tacos immediately!",
+        timestamp: new Date(Date.now() - 9000000),
         read: false,
         type: "warning"
       }

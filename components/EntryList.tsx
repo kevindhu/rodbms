@@ -1,231 +1,200 @@
-"use client";
+'use client';
 
-import { useState, useEffect, useCallback, useRef } from "react";
-import { useDatastore } from "@/contexts/DatastoreContext";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Loader2, Search, Plus, Trash2, RefreshCw, AlertCircle, X } from "lucide-react";
-import { useToast } from "@/components/ui/toast";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { useDatastore } from '@/contexts/DatastoreContext';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Loader2, Search, Plus, Trash2, RefreshCw, AlertCircle, X } from 'lucide-react';
+import { useToast } from '@/components/ui/toast';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
-const DEBUG_PREFIX = "🔍 [EntryList]";
+const LOAD_ENTRIES_PREFIX = '📥 [LOAD_ENTRIES]';
 
 export function EntryList() {
-  console.log(`${DEBUG_PREFIX} Component rendering`);
-  
   // Add a render counter
   const renderCount = useRef(0);
   renderCount.current++;
-  console.log(`${DEBUG_PREFIX} Render count: ${renderCount.current}`);
-  
-  const { 
-    selectedDatastore, 
-    fetchEntries, 
-    selectedEntryKey, 
+
+  const {
+    selectedDatastore,
+    fetchEntries,
+    selectedEntryKey,
     setSelectedEntryKey,
     saveEntry,
     deleteEntry,
-    isLoading
+    isLoading,
   } = useDatastore();
-  
+
   const { toast } = useToast();
-  
+
   const [entries, setEntries] = useState<string[]>([]);
-  const [searchTerm, setSearchTerm] = useState("");
+  const [searchTerm, setSearchTerm] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-  const [newEntryKey, setNewEntryKey] = useState("");
-  const [newEntryValue, setNewEntryValue] = useState("{}");
+  const [newEntryKey, setNewEntryKey] = useState('');
+  const [newEntryValue, setNewEntryValue] = useState('{}');
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [entryToDelete, setEntryToDelete] = useState("");
-  
+  const [entryToDelete, setEntryToDelete] = useState('');
+
   // Track previous entries to prevent unnecessary updates
   const prevEntriesRef = useRef<string[]>([]);
-  
+
   // Track if component is mounted to prevent state updates after unmount
   const isMountedRef = useRef(true);
-  
+
   // Add a ref to track if we're currently viewing search results
   const isViewingSearchResults = useRef(false);
-  
-  // Add this to track if we've already loaded the entry
-  const hasLoadedEntryRef = useRef(false);
-  
+
+  // Track when loadEntries is recreated
+  const loadEntriesRecreationCount = useRef(0);
+
   // Set up mount/unmount tracking
   useEffect(() => {
     isMountedRef.current = true;
-    
+
     return () => {
       isMountedRef.current = false;
     };
   }, []);
-  
-  // Modified loadEntries to track search state
-  const loadEntries = useCallback(async (search?: string) => {
-    console.log(`${DEBUG_PREFIX} loadEntries called, selectedDatastore: ${selectedDatastore}, search: ${search || 'none'}`);
-    
-    if (!selectedDatastore) {
-      console.log(`${DEBUG_PREFIX} No datastore selected, skipping fetch`);
-      return;
-    }
-    
-    setIsSearching(true);
-    
-    try {
-      console.log(`${DEBUG_PREFIX} Calling fetchEntries with search: ${search || 'none'}`);
-      // Track if we're viewing search results
-      isViewingSearchResults.current = !!search;
-      
-      const newEntries = await fetchEntries(selectedDatastore, search);
-      console.log(`${DEBUG_PREFIX} Received entries from API:`, newEntries);
-      
-      if (!isMountedRef.current) {
-        console.log(`${DEBUG_PREFIX} Component unmounted, skipping state update`);
+
+  // Modified loadEntries to track recreation
+  const loadEntries = useCallback(
+    async (search?: string) => {
+      // Increment recreation counter
+      loadEntriesRecreationCount.current++;
+
+      if (!selectedDatastore) {
         return;
       }
-      
-      // Always update entries when searching
-      if (search || JSON.stringify(newEntries) !== JSON.stringify(prevEntriesRef.current)) {
-        console.log(`${DEBUG_PREFIX} Entries changed or search performed, updating state`);
-        prevEntriesRef.current = newEntries;
-        setEntries(newEntries);
-        console.log(`${DEBUG_PREFIX} Entries state updated:`, newEntries);
-        
-        // Don't reset selected entry when searching - only if it no longer exists
-        if (selectedEntryKey && !newEntries.includes(selectedEntryKey)) {
-          console.log(`${DEBUG_PREFIX} Selected entry no longer exists, resetting selection`);
-          setSelectedEntryKey("");
+
+      setIsSearching(true);
+
+      try {
+        isViewingSearchResults.current = !!search;
+
+        const newEntries = await fetchEntries(selectedDatastore, search);
+
+        if (!isMountedRef.current) {
+          return;
         }
-      } else {
-        console.log(`${DEBUG_PREFIX} Entries unchanged, skipping state update`);
+
+        setEntries(newEntries);
+      } catch (error) {
+        console.error(`Error loading entries:`, error);
+        toast(
+          `Error loading entries: ${error instanceof Error ? error.message : String(error)}`,
+          'error'
+        );
+      } finally {
+        setIsSearching(false);
       }
-    } catch (error) {
-      console.error(`${DEBUG_PREFIX} Error loading entries:`, error);
-      toast(`Error loading entries: ${error instanceof Error ? error.message : String(error)}`, "error");
-    } finally {
-      setIsSearching(false);
-    }
-  }, [selectedDatastore, fetchEntries, selectedEntryKey, setSelectedEntryKey, toast]);
-  
-  // Modify the useEffect that loads entries when datastore changes
-  // to prevent it from clearing search results
+    },
+    [selectedDatastore, fetchEntries, toast]
+  );
+
+  // Add debugging to the useEffect
   useEffect(() => {
-    console.log(`${DEBUG_PREFIX} useEffect for loading entries triggered`);
-    console.log(`${DEBUG_PREFIX} selectedDatastore: ${selectedDatastore}`);
-    
-    // Only load entries if:
-    // 1. We have a selected datastore
-    // 2. We're not currently viewing search results
-    // 3. We haven't just loaded an entry (to prevent loops)
-    if (selectedDatastore && !isViewingSearchResults.current && !hasLoadedEntryRef.current) {
+    if (selectedDatastore) {
+      // Reset search state when datastore changes
+      const wasViewingSearchResults = isViewingSearchResults.current;
+      isViewingSearchResults.current = false;
+
+      // Clear search term if we were viewing search results
+      if (wasViewingSearchResults) {
+        setSearchTerm('');
+      }
+
       loadEntries();
     } else if (!selectedDatastore) {
-      // Clear entries if no datastore is selected
       setEntries([]);
     }
-  }, [selectedDatastore, loadEntries]);
-  
+  }, [selectedDatastore, loadEntries, setSearchTerm]);
+
   // Handle search submission
   const handleSearch = useCallback(() => {
     if (selectedDatastore && searchTerm) {
-      console.log(`${DEBUG_PREFIX} Performing search for: ${searchTerm}`);
       loadEntries(searchTerm);
     }
   }, [selectedDatastore, searchTerm, loadEntries]);
-  
+
   // Handle search on Enter key
-  const handleSearchKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      handleSearch();
-    }
-  }, [handleSearch]);
-  
+  const handleSearchKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === 'Enter') {
+        handleSearch();
+      }
+    },
+    [handleSearch]
+  );
+
   // Clear search - modify to be more explicit about what it's doing
   const clearSearch = useCallback(() => {
-    console.log(`${DEBUG_PREFIX} Clearing search`);
-    setSearchTerm("");
+    setSearchTerm('');
     isViewingSearchResults.current = false;
     loadEntries();
   }, [loadEntries]);
-  
+
   const handleCreateEntry = async () => {
     if (!newEntryKey) {
-      toast("Entry key is required", "error");
+      toast('Entry key is required', 'error');
       return;
     }
-    
+
     try {
       // Validate JSON
       const parsedValue = JSON.parse(newEntryValue);
-      
+
       // Call API to create entry
       await saveEntry(selectedDatastore, newEntryKey, parsedValue);
-      
+
       // Reset form and refresh entries
-      setNewEntryKey("");
-      setNewEntryValue("{}");
+      setNewEntryKey('');
+      setNewEntryValue('{}');
       setIsCreateDialogOpen(false);
       loadEntries();
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Unknown error";
-      toast("JSON parse error: " + message, "error");
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      toast('JSON parse error: ' + message, 'error');
     }
   };
-  
+
   const handleDeleteEntry = async () => {
     if (!entryToDelete) return;
-    
+
     try {
       await deleteEntry(selectedDatastore, entryToDelete);
-      
+
       // If we deleted the currently selected entry, clear the selection
       if (entryToDelete === selectedEntryKey) {
-        setSelectedEntryKey("");
+        setSelectedEntryKey('');
       }
-      
+
       setIsDeleteDialogOpen(false);
       loadEntries();
     } catch (error) {
-      console.error(`${DEBUG_PREFIX} Error deleting entry:`, error);
-      toast(`Error deleting entry: ${error instanceof Error ? error.message : String(error)}`, "error");
+      toast(
+        `Error deleting entry: ${error instanceof Error ? error.message : String(error)}`,
+        'error'
+      );
     }
   };
-  
+
   // Modify the handleEntryClick function
-  const handleEntryClick = useCallback((key: string) => {
-    console.log(`${DEBUG_PREFIX} Entry clicked: ${key}, preserving search state`);
-    
-    // Set a flag to indicate we're intentionally changing the selected entry
-    hasLoadedEntryRef.current = true;
-    
-    // Don't clear search when selecting an entry
-    setSelectedEntryKey(key);
-  }, [setSelectedEntryKey]);
-  
-  // Add a useEffect to handle selectedEntryKey changes without causing loops
-  useEffect(() => {
-    // This effect should only run when selectedEntryKey changes
-    console.log(`${DEBUG_PREFIX} Selected entry changed to: ${selectedEntryKey}`);
-    
-    // Reset the flag after a short delay to prevent immediate re-triggering
-    const timer = setTimeout(() => {
-      hasLoadedEntryRef.current = false;
-    }, 500);
-    
-    return () => clearTimeout(timer);
-  }, [selectedEntryKey]);
-  
-  // Debug effects to track state changes
-  useEffect(() => {
-    console.log(`${DEBUG_PREFIX} 🔄 EntryList state changed - selectedEntryKey:`, selectedEntryKey);
-  }, [selectedEntryKey]);
-  
-  useEffect(() => {
-    console.log(`${DEBUG_PREFIX} 🔄 EntryList state changed - entries:`, entries);
-  }, [entries]);
-  
+  const handleEntryClick = useCallback(
+    (key: string) => {
+      setSelectedEntryKey(key);
+    },
+    [setSelectedEntryKey]
+  );
+
   if (!selectedDatastore) {
     return (
       <Card className="shadow-sm">
@@ -238,7 +207,7 @@ export function EntryList() {
       </Card>
     );
   }
-  
+
   return (
     <Card className="shadow-sm">
       <CardHeader className="pb-3">
@@ -264,7 +233,7 @@ export function EntryList() {
           </div>
         </div>
       </CardHeader>
-      
+
       <CardContent>
         <div className="space-y-4">
           <div className="flex items-center gap-2">
@@ -279,16 +248,16 @@ export function EntryList() {
                 disabled={isLoading || isSearching}
               />
               {searchTerm && (
-                <button 
+                <button
                   className="absolute right-2 top-2.5 text-muted-foreground hover:text-foreground"
-                  onClick={() => setSearchTerm("")}
+                  onClick={() => setSearchTerm('')}
                 >
                   <X className="h-4 w-4" />
                 </button>
               )}
             </div>
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               size="sm"
               onClick={handleSearch}
               disabled={isLoading || isSearching}
@@ -301,8 +270,8 @@ export function EntryList() {
               Search
             </Button>
             {searchTerm && (
-              <Button 
-                variant="ghost" 
+              <Button
+                variant="ghost"
                 size="sm"
                 onClick={clearSearch}
                 disabled={isLoading || isSearching}
@@ -311,24 +280,19 @@ export function EntryList() {
               </Button>
             )}
           </div>
-          
+
           {isViewingSearchResults.current && searchTerm && (
             <div className="mb-2 px-2 py-1 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 text-sm rounded flex items-center justify-between">
               <span>
                 Showing results for: <strong>{searchTerm}</strong>
               </span>
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                className="h-6 px-2"
-                onClick={clearSearch}
-              >
+              <Button variant="ghost" size="sm" className="h-6 px-2" onClick={clearSearch}>
                 <X className="h-3 w-3 mr-1" />
                 Clear
               </Button>
             </div>
           )}
-          
+
           <ScrollArea className="h-[400px] rounded-md border">
             {isSearching ? (
               <div className="flex flex-col items-center justify-center h-full p-4">
@@ -341,8 +305,8 @@ export function EntryList() {
                   <div
                     key={entry}
                     className={`p-3 rounded cursor-pointer flex justify-between items-center ${
-                      selectedEntryKey === entry 
-                        ? 'bg-blue-100 dark:bg-blue-900/30 border-l-4 border-blue-500 dark:border-blue-400' 
+                      selectedEntryKey === entry
+                        ? 'bg-blue-100 dark:bg-blue-900/30 border-l-4 border-blue-500 dark:border-blue-400'
                         : 'hover:bg-gray-100 dark:hover:bg-gray-800/50'
                     }`}
                     onClick={() => handleEntryClick(entry)}
@@ -370,12 +334,17 @@ export function EntryList() {
                   {searchTerm ? (
                     <>
                       No entries match &quot;<strong>{searchTerm}</strong>&quot;
-                      <Button variant="link" size="sm" className="h-auto p-0 ml-1" onClick={clearSearch}>
+                      <Button
+                        variant="link"
+                        size="sm"
+                        className="h-auto p-0 ml-1"
+                        onClick={clearSearch}
+                      >
                         Clear search
                       </Button>
                     </>
                   ) : (
-                    "Create an entry to get started"
+                    'Create an entry to get started'
                   )}
                 </p>
               </div>
@@ -383,7 +352,7 @@ export function EntryList() {
           </ScrollArea>
         </div>
       </CardContent>
-      
+
       {/* Create Entry Dialog */}
       <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
         <DialogContent>
@@ -392,7 +361,9 @@ export function EntryList() {
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <label htmlFor="entryKey" className="text-sm font-medium">Entry Key</label>
+              <label htmlFor="entryKey" className="text-sm font-medium">
+                Entry Key
+              </label>
               <Input
                 id="entryKey"
                 value={newEntryKey}
@@ -401,7 +372,9 @@ export function EntryList() {
               />
             </div>
             <div className="space-y-2">
-              <label htmlFor="entryValue" className="text-sm font-medium">Entry Value (JSON)</label>
+              <label htmlFor="entryValue" className="text-sm font-medium">
+                Entry Value (JSON)
+              </label>
               <textarea
                 id="entryValue"
                 className="w-full min-h-[200px] p-2 border rounded-md font-mono text-sm"
@@ -412,12 +385,14 @@ export function EntryList() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
+              Cancel
+            </Button>
             <Button onClick={handleCreateEntry}>Create</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      
+
       {/* Delete Entry Dialog */}
       <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
         <DialogContent>
@@ -425,12 +400,19 @@ export function EntryList() {
             <DialogTitle>Delete Entry</DialogTitle>
           </DialogHeader>
           <div className="py-4">
-            <p>Are you sure you want to delete the entry <span className="font-mono font-bold">{entryToDelete}</span>?</p>
+            <p>
+              Are you sure you want to delete the entry{' '}
+              <span className="font-mono font-bold">{entryToDelete}</span>?
+            </p>
             <p className="text-sm text-muted-foreground mt-2">This action cannot be undone.</p>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>Cancel</Button>
-            <Button variant="destructive" onClick={handleDeleteEntry}>Delete</Button>
+            <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDeleteEntry}>
+              Delete
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -439,4 +421,3 @@ export function EntryList() {
 }
 
 export default EntryList;
-
