@@ -16,8 +16,6 @@ import {
 } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
-const LOAD_ENTRIES_PREFIX = '📥 [LOAD_ENTRIES]';
-
 export function EntryList() {
   // Add a render counter
   const renderCount = useRef(0);
