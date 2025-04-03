@@ -184,13 +184,21 @@ export function DatastoreProvider({ children }: { children: ReactNode }) {
   // Updated setSelectedEntryKeyWithCheck function that uses current state values
   const setSelectedEntryKeyWithCheck = useCallback(
     (key: string) => {
-      setSelectedVersion(null);
+      // First check if the key is different to avoid unnecessary state updates
       if (key === selectedEntryKey) {
         return;
       }
+
+      // Clear the selected version first
+      setSelectedVersion(null);
+
+      // Then set the new entry key
       setSelectedEntryKey(key);
+
+      // Also clear the versions array when changing entries
+      setVersions([]);
     },
-    [selectedEntryKey, setSelectedEntryKey, setSelectedVersion]
+    [selectedEntryKey, setSelectedEntryKey, setSelectedVersion, setVersions]
   );
 
   // Add this to your DatastoreProvider
