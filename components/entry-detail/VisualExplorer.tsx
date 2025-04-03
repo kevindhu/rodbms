@@ -4,7 +4,9 @@ import { useState, useRef, ReactNode, useEffect } from 'react';
 import { Loader2, ChevronRight, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { JsonValue } from '@/components/explorer/EntryDetailPanel';
+
+// Define proper types for JSON values
+type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
 
 // Props for the main component
 interface VisualExplorerProps {
@@ -196,7 +198,7 @@ function ArrayNode({ value, path, isExpanded, togglePath, renderNode }: Collecti
           <ChevronRight className="h-4 w-4 mr-1 text-muted-foreground" />
         )}
         <span className="text-purple-600 dark:text-purple-400 font-medium">
-          Array [{(value as any[]).length}]
+          Array [{(value as JsonValue[]).length}]
         </span>
       </div>
 
