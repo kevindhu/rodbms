@@ -145,7 +145,7 @@ export function EntryListPanel() {
     } else if (!selectedDatastore) {
       setEntries([]);
     }
-  }, [selectedDatastore, loadEntries, setSearchTerm]);
+  }, [selectedDatastore, loadEntries, setSearchTerm, searchTerm]);
 
   // Handle search submission
   const handleSearch = useCallback(() => {

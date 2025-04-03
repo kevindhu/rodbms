@@ -204,7 +204,7 @@ function ArrayNode({ value, path, isExpanded, togglePath, renderNode }: Collecti
 
       {isExpanded && (
         <div className="pl-4 mt-1 border-l border-border">
-          {(value as any[]).map((item, index) => (
+          {(value as JsonValue[]).map((item, index) => (
             <div key={index} className="py-1">
               <div className="flex items-start">
                 <span className="text-muted-foreground mr-2 font-mono">{index}:</span>

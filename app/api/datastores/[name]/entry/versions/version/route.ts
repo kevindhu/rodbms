@@ -1,75 +1,60 @@
-// app/api/datastores/[name]/entry/versions/version/route.ts
+// app/api/datastores/[name]/entry/version/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { getEntryVersion } from '@/lib/robloxApi';
-import type { ErrorResponse } from '@/types/api';
 
-export async function GET(req: NextRequest, { params }: { params: { name: string } }) {
+// Define response types
+interface VersionResponse {
+  data: string;
+  version: string;
+  createdTime: string;
+  contentLength: number;
+  objectCreatedTime?: string;
+}
+
+interface ErrorResponse {
+  error: string;
+}
+
+export async function GET(req: NextRequest, { params }: { params: Promise<{ name: string }> }) {
   try {
-    const { name: datastoreName } = params;
+    const { name: datastoreName } = await params;
     const { searchParams } = new URL(req.url);
-
-    // Get parameters from query string or headers
     const universeId = searchParams.get('universeId');
-    const apiToken = req.headers.get('x-api-key') || searchParams.get('apiToken');
     const entryKey = searchParams.get('entryKey');
     const versionId = searchParams.get('versionId');
-    const scope = searchParams.get('scope') || '';
 
-    // Log the parameters for debugging (remove in production)
-    console.log('Version API request parameters:', {
-      datastoreName,
+    // Get API token from header first, fall back to query param
+    const apiToken = req.headers.get('x-api-key') || searchParams.get('apiToken');
+
+    if (!universeId || !entryKey || !versionId || !apiToken) {
+      return NextResponse.json<ErrorResponse>(
+        { error: 'Missing required parameters' },
+        { status: 400 }
+      );
+    }
+
+    const result = await getEntryVersion(
       universeId,
-      apiToken: apiToken ? '[REDACTED]' : undefined,
+      apiToken,
+      datastoreName,
       entryKey,
       versionId,
-      scope,
-    });
+      'global' // scope
+    );
 
-    // Check for required parameters
-    if (!universeId) {
+    return NextResponse.json<VersionResponse>(result);
+  } catch (error) {
+    console.error('Error fetching entry version:', error);
+
+    // Check if this is a 404 error from the Roblox API
+    if (error instanceof Error && error.message.includes('404')) {
       return NextResponse.json<ErrorResponse>(
-        { error: 'Missing universeId parameter' },
-        { status: 400 }
-      );
-    }
-    if (!apiToken) {
-      return NextResponse.json<ErrorResponse>(
-        { error: 'Missing apiToken parameter' },
-        { status: 400 }
-      );
-    }
-    if (!entryKey) {
-      return NextResponse.json<ErrorResponse>(
-        { error: 'Missing entryKey parameter' },
-        { status: 400 }
-      );
-    }
-    if (!versionId) {
-      return NextResponse.json<ErrorResponse>(
-        { error: 'Missing versionId parameter' },
-        { status: 400 }
+        { error: 'Entry version not found' },
+        { status: 404 }
       );
     }
 
-    // Call the Roblox API
-    try {
-      const data = await getEntryVersion(
-        universeId,
-        apiToken,
-        datastoreName,
-        entryKey,
-        versionId,
-        scope
-      );
-      return NextResponse.json(data);
-    } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      console.error('Error fetching version from Roblox API:', errorMessage);
-      return NextResponse.json<ErrorResponse>({ error: errorMessage }, { status: 500 });
-    }
-  } catch (err: unknown) {
-    const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-    console.error('Error in version API route:', errorMessage);
-    return NextResponse.json<ErrorResponse>({ error: errorMessage }, { status: 500 });
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return NextResponse.json<ErrorResponse>({ error: message }, { status: 500 });
   }
 }
