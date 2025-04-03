@@ -315,9 +315,38 @@ export function VisualExplorer({ data, isLoading, onDataChange }: VisualExplorer
   };
 
   /**
-   * Handles saving edited values in the JSON explorer
-   * Parses the input value to the correct type and updates the data structure
+   * Helper function to retrieve a value at a specific path in the JSON structure
+   * @param obj - The JSON object to traverse
+   * @param path - The dot notation path (e.g., ".users[0].name")
+   * @returns The value at the specified path
    */
+  const getValueAtPath = (obj: JsonValue | null, path: string): JsonValue => {
+    if (path === '') return obj;
+    if (!obj || typeof obj !== 'object') return null;
+
+    // Parse the path into segments
+    const pathParts = path.split(/\.|\[|\]/).filter(Boolean);
+    let current: JsonValue = obj;
+
+    // Navigate through each path segment
+    for (const part of pathParts) {
+      const key = !isNaN(Number(part)) ? Number(part) : part;
+
+      if (current === null || typeof current !== 'object') {
+        return null;
+      }
+
+      // Type assertion to access properties
+      if (Array.isArray(current)) {
+        current = current[key as number] as JsonValue;
+      } else {
+        current = (current as Record<string, JsonValue>)[key as string];
+      }
+    }
+
+    return current;
+  };
+
   const saveEdit = () => {
     if (!editingPath) return;
 
@@ -368,8 +397,8 @@ export function VisualExplorer({ data, isLoading, onDataChange }: VisualExplorer
 
       // For nested properties, navigate to the parent object
       const pathParts = editingPath.split(/\.|\[|\]/).filter(Boolean);
-      let current: any = newData;
-      let parent: any = null;
+      let current: JsonValue = newData;
+      let parent: Record<string, JsonValue> | JsonValue[] | null = null;
       let finalKey: string | number = '';
 
       // Navigate through the path to find the parent object
@@ -378,18 +407,27 @@ export function VisualExplorer({ data, isLoading, onDataChange }: VisualExplorer
 
         if (i === pathParts.length - 1) {
           // Last part - store the parent and the key
-          parent = current;
+          parent = current as Record<string, JsonValue> | JsonValue[];
           finalKey = !isNaN(Number(part)) ? Number(part) : part;
         } else {
           // Navigate to the next level
           const key = !isNaN(Number(part)) ? Number(part) : part;
-          current = current[key];
+
+          if (Array.isArray(current)) {
+            current = current[key as number] as JsonValue;
+          } else if (current !== null && typeof current === 'object') {
+            current = (current as Record<string, JsonValue>)[key as string];
+          }
         }
       }
 
       // Update the value in the data structure
       if (parent !== null) {
-        parent[finalKey] = parsedValue;
+        if (Array.isArray(parent)) {
+          parent[finalKey as number] = parsedValue;
+        } else {
+          parent[finalKey as string] = parsedValue;
+        }
         onDataChange(newData);
       }
 
@@ -401,34 +439,6 @@ export function VisualExplorer({ data, isLoading, onDataChange }: VisualExplorer
       console.error('Error saving edit:', error);
       toast(error instanceof Error ? error.message : 'Failed to update value', 'error');
     }
-  };
-
-  /**
-   * Helper function to retrieve a value at a specific path in the JSON structure
-   * @param obj - The JSON object to traverse
-   * @param path - The dot notation path (e.g., ".users[0].name")
-   * @returns The value at the specified path
-   */
-  const getValueAtPath = (obj: JsonValue | null, path: string): JsonValue => {
-    if (path === '') return obj;
-    if (!obj || typeof obj !== 'object') return null;
-
-    // Parse the path into segments
-    const pathParts = path.split(/\.|\[|\]/).filter(Boolean);
-    let current: any = obj;
-
-    // Navigate through each path segment
-    for (const part of pathParts) {
-      const key = !isNaN(Number(part)) ? Number(part) : part;
-
-      if (current === null || current === undefined || typeof current !== 'object') {
-        return null;
-      }
-
-      current = current[key];
-    }
-
-    return current;
   };
 
   const cancelEdit = () => {
