@@ -106,17 +106,8 @@ export function EntryListPanel() {
     // Compare current values with previous values
     const prevValues = prevValuesRef.current;
 
-    console.log('EntryListPanel effect triggered with values:', {
-      selectedDatastore,
-      wasViewingSearchResults: isViewingSearchResults.current,
-    });
-
-    console.log('Previous values were:', prevValues);
-
     // Only proceed if there's an actual change in the datastore
     const hasDatastoreChanged = prevValues.selectedDatastore !== selectedDatastore;
-
-    console.log('Datastore has changed:', hasDatastoreChanged);
 
     // Update the ref with current values
     prevValuesRef.current = {
@@ -129,7 +120,6 @@ export function EntryListPanel() {
       const wasViewingSearchResults = isViewingSearchResults.current;
 
       if (hasDatastoreChanged) {
-        console.log('Datastore changed, resetting search state');
         isViewingSearchResults.current = false;
 
         // Clear search term if we were viewing search results
@@ -137,10 +127,7 @@ export function EntryListPanel() {
           setSearchTerm('');
         }
 
-        console.log('Loading entries due to datastore change');
         loadEntries();
-      } else {
-        console.log('Skipping loadEntries call - no actual datastore change');
       }
     } else if (!selectedDatastore) {
       setEntries([]);

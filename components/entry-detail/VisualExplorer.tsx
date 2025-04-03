@@ -4,6 +4,7 @@ import { useState, useRef, ReactNode, useEffect } from 'react';
 import { Loader2, ChevronRight, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { useToast } from '@/components/ui/toast';
 
 // Define proper types for JSON values
 type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
@@ -282,6 +283,9 @@ export function VisualExplorer({ data, isLoading, onDataChange }: VisualExplorer
   const [editValue, setEditValue] = useState<string>('');
   const initializedRef = useRef(false);
 
+  // Use your custom toast hook
+  const { toast } = useToast();
+
   // Move initialization to useEffect to prevent infinite renders
   useEffect(() => {
     // Only run this once when data first loads
@@ -310,64 +314,121 @@ export function VisualExplorer({ data, isLoading, onDataChange }: VisualExplorer
     setEditValue(typeof value === 'string' ? value : JSON.stringify(value));
   };
 
-  const saveEdit = (path: string) => {
-    if (!path || path === '' || !data) return;
+  /**
+   * Handles saving edited values in the JSON explorer
+   * Parses the input value to the correct type and updates the data structure
+   */
+  const saveEdit = () => {
+    if (!editingPath) return;
 
     try {
-      // Parse the path to navigate the object
-      const pathParts = path.split('.').filter((p) => p !== '');
-      const newData: JsonValue = JSON.parse(JSON.stringify(data));
+      // Get the original value at this path
+      const originalValue = getValueAtPath(data, editingPath);
 
-      // Try to parse the edit value based on the original type
+      // Parse the edited value based on the original value's type
       let parsedValue: JsonValue;
-      try {
-        parsedValue = JSON.parse(editValue);
-      } catch {
-        // If parsing fails, treat as string
-        parsedValue = editValue;
-      }
 
-      // Navigate to the parent object
-      let current: Record<string, JsonValue> | JsonValue[] = newData as
-        | Record<string, JsonValue>
-        | JsonValue[];
-      for (let i = 0; i < pathParts.length - 1; i++) {
-        const part = pathParts[i];
-        if (!isNaN(Number(part))) {
-          // Array index
-          if (Array.isArray(current)) {
-            current = current[Number(part)] as Record<string, JsonValue> | JsonValue[];
-          } else {
-            throw new Error(
-              `Cannot use numeric index on non-array at path: ${pathParts.slice(0, i).join('.')}`
-            );
-          }
-        } else {
-          // Object key
-          if (!Array.isArray(current) && typeof current === 'object' && current !== null) {
-            current = current[part] as Record<string, JsonValue> | JsonValue[];
-          } else {
-            throw new Error(
-              `Cannot use string key on non-object at path: ${pathParts.slice(0, i).join('.')}`
-            );
-          }
+      // Convert string input to the appropriate type
+      if (typeof originalValue === 'number') {
+        const numValue = Number(editValue);
+        if (isNaN(numValue)) {
+          throw new Error('Invalid number format');
+        }
+        parsedValue = numValue;
+      } else if (typeof originalValue === 'boolean') {
+        parsedValue = editValue === 'true';
+      } else if (typeof originalValue === 'string') {
+        parsedValue = editValue;
+      } else {
+        // For complex types (objects/arrays), parse as JSON
+        try {
+          parsedValue = JSON.parse(editValue);
+        } catch (e) {
+          throw new Error(`Invalid JSON: ${e instanceof Error ? e.message : 'Unknown error'}`);
         }
       }
 
-      // Update the value
-      const lastPart = pathParts[pathParts.length - 1];
-      if (!isNaN(Number(lastPart))) {
-        (current as JsonValue[])[Number(lastPart)] = parsedValue;
-      } else {
-        (current as Record<string, JsonValue>)[lastPart] = parsedValue;
+      // Log the update details for debugging
+      console.log('UPDATING VALUE:', {
+        path: editingPath,
+        oldValue: originalValue,
+        newValue: parsedValue,
+      });
+
+      // Create a deep clone of the data to avoid direct mutations
+      const newData = JSON.parse(JSON.stringify(data));
+
+      // Handle root-level edits
+      if (editingPath === '') {
+        onDataChange(parsedValue);
+        setEditingPath(null);
+        toast('Value updated successfully', 'success');
+        return;
       }
 
-      // Update state
-      onDataChange(newData);
+      // For nested properties, navigate to the parent object
+      const pathParts = editingPath.split(/\.|\[|\]/).filter(Boolean);
+      let current: any = newData;
+      let parent: any = null;
+      let finalKey: string | number = '';
+
+      // Navigate through the path to find the parent object
+      for (let i = 0; i < pathParts.length; i++) {
+        const part = pathParts[i];
+
+        if (i === pathParts.length - 1) {
+          // Last part - store the parent and the key
+          parent = current;
+          finalKey = !isNaN(Number(part)) ? Number(part) : part;
+        } else {
+          // Navigate to the next level
+          const key = !isNaN(Number(part)) ? Number(part) : part;
+          current = current[key];
+        }
+      }
+
+      // Update the value in the data structure
+      if (parent !== null) {
+        parent[finalKey] = parsedValue;
+        onDataChange(newData);
+      }
+
+      // Reset editing state and show success message
       setEditingPath(null);
-    } catch (err) {
-      console.error('Failed to update value:', err);
+      toast('Value updated successfully', 'success');
+    } catch (error) {
+      // Handle errors and show error message
+      console.error('Error saving edit:', error);
+      toast(error instanceof Error ? error.message : 'Failed to update value', 'error');
     }
+  };
+
+  /**
+   * Helper function to retrieve a value at a specific path in the JSON structure
+   * @param obj - The JSON object to traverse
+   * @param path - The dot notation path (e.g., ".users[0].name")
+   * @returns The value at the specified path
+   */
+  const getValueAtPath = (obj: JsonValue | null, path: string): JsonValue => {
+    if (path === '') return obj;
+    if (!obj || typeof obj !== 'object') return null;
+
+    // Parse the path into segments
+    const pathParts = path.split(/\.|\[|\]/).filter(Boolean);
+    let current: any = obj;
+
+    // Navigate through each path segment
+    for (const part of pathParts) {
+      const key = !isNaN(Number(part)) ? Number(part) : part;
+
+      if (current === null || current === undefined || typeof current !== 'object') {
+        return null;
+      }
+
+      current = current[key];
+    }
+
+    return current;
   };
 
   const cancelEdit = () => {
@@ -378,7 +439,7 @@ export function VisualExplorer({ data, isLoading, onDataChange }: VisualExplorer
   const renderNode = (value: JsonValue, path: string = '') => {
     // Handle editing state for this node
     if (editingPath === path) {
-      const handleSave = () => saveEdit(path);
+      const handleSave = () => saveEdit();
 
       if (typeof value === 'boolean') {
         return (

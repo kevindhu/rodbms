@@ -66,7 +66,6 @@ export function EntryDetailPanel() {
 
       // If a version is selected, fetch that specific version
       if (selectedVersion) {
-        console.log(`Loading version ${selectedVersion.version} of entry ${selectedEntryKey}`);
         data = await fetchEntryVersion(
           selectedDatastore,
           selectedEntryKey,
@@ -76,8 +75,6 @@ export function EntryDetailPanel() {
         // Otherwise fetch the latest version
         data = await fetchEntry(selectedDatastore, selectedEntryKey);
       }
-
-      console.log('Data:', data);
 
       // Check if we got an error response
       if (data && data.error === true) {

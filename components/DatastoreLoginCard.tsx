@@ -33,8 +33,6 @@ export function DatastoreLoginCard() {
     }
   };
 
-  console.log('DatastoreLoginCard rendering with:', { universeId, apiToken });
-
   return (
     <Card>
       <CardHeader>

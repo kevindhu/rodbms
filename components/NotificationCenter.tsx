@@ -20,20 +20,6 @@ export function NotificationCenter() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isOpen, setIsOpen] = useState(false);
 
-  // Demo notifications
-  useEffect(() => {
-    setNotifications([
-      {
-        id: '1',
-        title: 'Welcome to DBMS',
-        message: 'You are awesome for using this tool!',
-        timestamp: new Date(),
-        read: false,
-        type: 'info',
-      },
-    ]);
-  }, []);
-
   const unreadCount = notifications.filter((n) => !n.read).length;
 
   const markAllAsRead = () => {
