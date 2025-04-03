@@ -284,6 +284,16 @@ export function EntryDetailPanel() {
                 selectedEntryKey={selectedEntryKey}
               />
 
+              {/* Version history badge */}
+              {selectedVersion && (
+                <div className="absolute top-2 right-2 bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-300 text-xs px-2 py-1 rounded-full flex items-center">
+                  <Clock className="h-3 w-3 mr-1" />
+                  {selectedVersion.isLatest
+                    ? 'Latest Version'
+                    : `Version ${selectedVersion.version.substring(0, 8)}`}
+                </div>
+              )}
+
               {/* Error message display */}
               {jsonError && (
                 <div className="mb-3 p-2 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-md flex items-center text-sm text-red-600 dark:text-red-400">

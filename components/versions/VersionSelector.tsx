@@ -155,7 +155,13 @@ export function VersionSelector({ selectedDatastore, selectedEntryKey }: Version
           </DropdownMenu>
         ) : null}
 
-        <Button variant="outline" size="sm" onClick={loadVersions} disabled={loading}>
+        <Button
+          variant="outline"
+          size="sm"
+          className="flex items-center gap-1"
+          onClick={loadVersions}
+          disabled={loading}
+        >
           {loading ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : null}
           List Versions
         </Button>

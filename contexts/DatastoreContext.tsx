@@ -169,9 +169,9 @@ export function DatastoreProvider({ children }: { children: ReactNode }) {
     (datastore: string) => {
       if (datastore !== prevDatastoreRef.current) {
         // Reset entry key and data when datastore changes
+        setSelectedVersion(null);
         setSelectedEntryKey('');
         setEntryData('');
-        setSelectedVersion(null);
 
         // Update the selected datastore
         setSelectedDatastore(datastore);
@@ -184,12 +184,13 @@ export function DatastoreProvider({ children }: { children: ReactNode }) {
   // Updated setSelectedEntryKeyWithCheck function that uses current state values
   const setSelectedEntryKeyWithCheck = useCallback(
     (key: string) => {
+      setSelectedVersion(null);
       if (key === selectedEntryKey) {
         return;
       }
       setSelectedEntryKey(key);
     },
-    [selectedEntryKey]
+    [selectedEntryKey, setSelectedEntryKey, setSelectedVersion]
   );
 
   // Add this to your DatastoreProvider
