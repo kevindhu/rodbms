@@ -13,7 +13,7 @@ export function DatastoreManagerScreen() {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold">Roblox Datastore Manager</h1>
+        <h1 className="text-2xl font-bold">ROBLOX DATASTORE MANAGER</h1>
         <div className="flex items-center gap-2">
           <LiveMode />
           <ThemeToggle />
